@@ -2,10 +2,18 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from sqlalchemy import create_engine
 
-from afdd.evaluator import get_issue, list_issues
+from afdd.ai_authoring import (
+    answer_clarification,
+    cancel_request,
+    confirm_request,
+    create_authoring_request,
+    get_request,
+)
 from afdd.dashboard import equipment_context, operations_status, portfolio
+from afdd.evaluator import get_issue, list_issues
 from afdd.ontology import (
     entity_by_source_id,
     equipment_datapoints,
@@ -50,6 +58,55 @@ async def health() -> dict[str, str]:
 
 def ontology_engine():
     return create_engine(get_settings().database_url)
+
+
+class AuthoringPrompt(BaseModel):
+    prompt: str = Field(min_length=1, max_length=10_000)
+
+
+class ClarificationAnswer(BaseModel):
+    answer: str = Field(min_length=1, max_length=5_000)
+
+
+@app.post("/ai/authoring-requests", tags=["ai-authoring"], status_code=201)
+def start_ai_authoring(body: AuthoringPrompt) -> dict:
+    return create_authoring_request(ontology_engine(), body.prompt)
+
+
+@app.get("/ai/authoring-requests/{request_id}", tags=["ai-authoring"])
+def inspect_ai_authoring(request_id: str) -> dict:
+    try:
+        return get_request(ontology_engine(), request_id)
+    except (LookupError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="Authoring request not found") from exc
+
+
+@app.post("/ai/authoring-requests/{request_id}/clarification", tags=["ai-authoring"])
+def clarify_ai_authoring(request_id: str, body: ClarificationAnswer) -> dict:
+    try:
+        return answer_clarification(ontology_engine(), request_id, body.answer)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/ai/authoring-requests/{request_id}/confirm", tags=["ai-authoring"])
+def confirm_ai_authoring(request_id: str) -> dict:
+    try:
+        return confirm_request(ontology_engine(), request_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/ai/authoring-requests/{request_id}/cancel", tags=["ai-authoring"])
+def cancel_ai_authoring(request_id: str) -> dict:
+    try:
+        return cancel_request(ontology_engine(), request_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/properties", tags=["ontology"])

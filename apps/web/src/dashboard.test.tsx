@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach } from "vitest";
-import { IssueView, PortfolioView, RuleView, TelemetryValue } from "./main";
+import { AiAuthoringView, IssueView, PortfolioView, RuleView, TelemetryValue } from "./main";
 
 const response = (body: unknown) => ({ ok: true, json: async () => body, text: async () => "" });
 afterEach(cleanup);
@@ -25,5 +25,12 @@ describe("operations dashboard", () => {
   it("renders preview exclusions and local override", async () => {
     vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(response(url.includes("/preview") ? { matched: [{ equipment_id: "ahu-b", property_id: "building-b", floor_id: "f01", served_zone: "zone", effective_threshold: 2, effective_duration_seconds: 900, effective_override: { threshold: 2 } }], excluded: [{ equipment_id: "ahu-c", reason: "REQUIRED_POINT_MISSING" }] } : url.includes("/versions/") ? { severity: "Critical", logic_config: { threshold: 3, duration_seconds: 900, freshness_seconds: 120 }, scope_config: {}, overrides: [{ property_id: "building-b", threshold: 2, duration_seconds: 900 }] } : { display_name: "SAT deviation", rule_key: "ahu-sat-deviation", enabled: true, active_version: 1, versions: [{ version: 1 }] }))));
     render(<RuleView ruleId="rule" />); await waitFor(() => expect(document.body.textContent).toContain("local override")); expect(document.body.textContent).toContain("REQUIRED_POINT_MISSING");
+  });
+  it("requires an explicit confirmation on the AI review screen", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(response({ id: "request", state: "READY_FOR_REVIEW", provider: "fake", model: "test", model_calls: 1, retry_count: 0, original_prompt: "Create rule", reviewed_draft: { severity: "Critical", logic: { threshold: 3, duration_seconds: 900 }, scope: { required_points: ["RUN", "SAT", "SAT_SP"] } }, target_preview: { matched_count: 1, excluded_count: 1, matched: [{ equipment_id: "ahu-a", property_id: "building-a", floor_id: "building-a-f01", effective_threshold: 3 }], excluded: [{ equipment_id: "ahu-c", exclusion_reasons: ["OUTSIDE_SELECTED_SCOPE"] }] }, warnings: [], state_trace: [], tool_trace: [] }))));
+    render(<AiAuthoringView />); fireEvent.click(screen.getByText("Start safe authoring workflow"));
+    await waitFor(() => expect(screen.getByText("Confirm and activate rule")).toBeTruthy());
+    expect(document.body.textContent).toContain("This rule is not active");
+    expect(document.body.textContent).toContain("OUTSIDE_SELECTED_SCOPE");
   });
 });

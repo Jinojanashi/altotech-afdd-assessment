@@ -120,3 +120,15 @@ Start the full local demo with `docker compose up --build`, then open [http://lo
 The focused routes are `/portfolio`, `/issues/{issueId}`, and `/rules/{ruleId}`. Portfolio uses the read-only `/portfolio` projection for canonical building/floor/zone/AHU navigation and operational health; `/equipment/{sourceId}/context` exposes room IAQ and floor-meter context without treating a floor meter as an AHU point.
 
 For the hero journey, open Building A in Portfolio, select `ahu-a-f02-east`, then select its Critical recent issue. The investigation explicitly shows its plant-room installation separately from the served HVAC zone and potentially affected rooms, then links to the rule preview where the Building B override is visible.
+
+## AI-assisted rule authoring
+
+Open `http://localhost:3000/rules/new/ai` for the safe authoring workflow. Configure `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in `.env`; without a key the request fails safely and records the reason. The model only proposes structured intent. Server-side ontology discovery, DSL validation, target preview, human review, and explicit confirmation are mandatory.
+
+Run one real-model interpretation and preview without activation with:
+
+```bash
+docker compose run --rm api python -m afdd.ai_demo
+```
+
+See [docs/ai-authoring.md](docs/ai-authoring.md) for states, trust boundaries, bounded tools, retries, limitations, and the AI-assistance disclosure.

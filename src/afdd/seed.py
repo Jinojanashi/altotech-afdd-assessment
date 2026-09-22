@@ -156,6 +156,7 @@ def reset_inventory(engine: Engine) -> None:
     """Clear canonical inventory and all FK-dependent local data; intended for local development only."""
 
     with engine.begin() as connection:
+        connection.execute(text("TRUNCATE TABLE ai_authoring_requests"))
         connection.execute(text("TRUNCATE TABLE afdd_rules CASCADE"))
         connection.execute(text("TRUNCATE TABLE ingestion_events CASCADE"))
         connection.execute(text("TRUNCATE TABLE ontology_entities CASCADE"))

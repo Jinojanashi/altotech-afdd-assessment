@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     simulator_interval_seconds: int = 60
     simulator_acceleration_factor: float = 60.0
     consumer_group_ingestion: str = "afdd-ingestion-v1"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-5-mini"
 
     @property
     def broker_list(self) -> list[str]:
