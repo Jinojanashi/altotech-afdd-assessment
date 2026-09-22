@@ -8,12 +8,12 @@ Initial project skeleton for the Senior Full Stack Engineer AFDD assessment.
 - `ingestion`: validates and persists telemetry events.
 - `worker`: evaluates AFDD rules from accepted telemetry.
 - `api`: FastAPI application for platform APIs.
-- `web`: React and TypeScript application shell.
+- `web`: React and TypeScript operations dashboard.
 - `db`: PostgreSQL with TimescaleDB.
 - `redpanda`: Kafka-compatible event broker.
 
-The Python services are intentionally thin placeholders. The dashboard, complete ingestion pipeline,
-AFDD evaluator, and AI-assisted rule authoring are not part of this initial skeleton.
+The dashboard, ingestion pipeline, and deterministic AFDD evaluator are implemented as focused assessment
+milestones. AI-assisted rule authoring is intentionally out of scope.
 
 ## Local setup
 
@@ -111,3 +111,12 @@ curl http://localhost:8000/issues
 Rule validation and preview are available through `POST /rules/validate` and `POST /rules/preview`. Stored
 versions can be previewed at `GET /rules/{rule_id}/versions/{version}/preview`; evaluation remains in the
 separate worker and is never performed by an API request.
+# AFDD assessment
+
+## Operations dashboard
+
+Start the full local demo with `docker compose up --build`, then open [http://localhost:3000/portfolio](http://localhost:3000/portfolio). The API is available at [http://localhost:8000](http://localhost:8000).
+
+The focused routes are `/portfolio`, `/issues/{issueId}`, and `/rules/{ruleId}`. Portfolio uses the read-only `/portfolio` projection for canonical building/floor/zone/AHU navigation and operational health; `/equipment/{sourceId}/context` exposes room IAQ and floor-meter context without treating a floor meter as an AHU point.
+
+For the hero journey, open Building A in Portfolio, select `ahu-a-f02-east`, then select its Critical recent issue. The investigation explicitly shows its plant-room installation separately from the served HVAC zone and potentially affected rooms, then links to the rule preview where the Building B override is visible.

@@ -1,9 +1,11 @@
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine
 
 from afdd.evaluator import get_issue, list_issues
+from afdd.dashboard import equipment_context, operations_status, portfolio
 from afdd.ontology import (
     entity_by_source_id,
     equipment_datapoints,
@@ -33,6 +35,12 @@ from afdd.telemetry import (
 )
 
 app = FastAPI(title="AFDD API", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", tags=["operations"])
@@ -47,6 +55,19 @@ def ontology_engine():
 @app.get("/properties", tags=["ontology"])
 def properties() -> list[dict]:
     return list_properties(ontology_engine())
+
+
+@app.get("/portfolio", tags=["operations"])
+def portfolio_overview() -> dict:
+    return {"operations": operations_status(ontology_engine()), "properties": portfolio(ontology_engine())}
+
+
+@app.get("/equipment/{source_id}/context", tags=["ontology"])
+def inspect_equipment_context(source_id: str) -> dict:
+    context = equipment_context(ontology_engine(), source_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="AHU not found")
+    return context
 
 
 @app.get("/entities/{source_id}", tags=["ontology"])

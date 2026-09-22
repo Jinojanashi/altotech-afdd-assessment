@@ -7,6 +7,9 @@ RUN npm install
 COPY apps/web ./
 RUN npm run build
 
+FROM build AS test
+RUN npm test
+
 FROM nginx:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
