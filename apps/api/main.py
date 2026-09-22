@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from datetime import datetime
+
+from fastapi import FastAPI, HTTPException, Query
 from sqlalchemy import create_engine
 
 from afdd.ontology import (
@@ -9,6 +11,12 @@ from afdd.ontology import (
     relationships_for_entity,
 )
 from afdd.settings import get_settings
+from afdd.telemetry import (
+    latest_for_equipment,
+    point_history,
+    recent_ingestion_events,
+    telemetry_status,
+)
 
 app = FastAPI(title="AFDD API", version="0.1.0")
 
@@ -56,3 +64,25 @@ def inspect_equipment_topology(source_id: str) -> dict:
     if topology is None:
         raise HTTPException(status_code=404, detail="Equipment not found")
     return topology
+
+
+@app.get("/telemetry/equipment/{source_id}/latest", tags=["telemetry"])
+def latest_readings(source_id: str) -> list[dict]:
+    return latest_for_equipment(ontology_engine(), source_id)
+
+
+@app.get("/telemetry/points/{source_id}/history", tags=["telemetry"])
+def history(source_id: str, start: datetime, end: datetime) -> list[dict]:
+    if start > end:
+        raise HTTPException(status_code=422, detail="start must be before end")
+    return point_history(ontology_engine(), source_id, start, end)
+
+
+@app.get("/ingestion/status", tags=["operations"])
+def ingestion_status() -> dict:
+    return telemetry_status(ontology_engine())
+
+
+@app.get("/ingestion/events", tags=["operations"])
+def ingestion_events(limit: int = Query(50, ge=1, le=200)) -> list[dict]:
+    return recent_ingestion_events(ontology_engine(), limit)

@@ -9,4 +9,5 @@ COPY apps/__init__.py ./apps/__init__.py
 COPY apps/api ./apps/api
 COPY tests ./tests
 COPY data/candidate-starter-pack/building-and-equipment ./data/candidate-starter-pack/building-and-equipment
+COPY data/candidate-starter-pack/sample-telemetry ./data/candidate-starter-pack/sample-telemetry
 CMD ["pytest", "-q"]

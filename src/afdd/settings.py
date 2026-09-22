@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     seed_source_dir: str = "/app/data/candidate-starter-pack/building-and-equipment"
     simulator_interval_seconds: int = 60
     simulator_acceleration_factor: float = 60.0
+    consumer_group_ingestion: str = "afdd-ingestion-v1"
 
     @property
     def broker_list(self) -> list[str]:

@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import Any, Literal
-from uuid import UUID, NAMESPACE_URL, uuid5
+from typing import Literal
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, Field
 
@@ -12,10 +12,8 @@ def event_id_for(source_system: str, source_record_id: str) -> UUID:
 
 
 class TelemetryValue(BaseModel):
-    source_point_id: str
-    value: float | str | bool | None
-    unit: str | None = None
-    quality: Literal["good", "missing", "invalid"] = "good"
+    measurement: str
+    value: float | str | bool
 
 
 class TelemetryEvent(BaseModel):
@@ -23,10 +21,11 @@ class TelemetryEvent(BaseModel):
 
     schema_version: Literal[1] = 1
     event_id: UUID
-    source_system: str = "candidate-starter-pack"
+    source: str = "candidate-starter-pack"
     source_record_id: str
     equipment_id: str
+    equipment_type: Literal["AHU", "IAQ Sensor", "Electricity Meter"]
     observed_at: datetime
     received_at: datetime
-    values: list[TelemetryValue] = Field(default_factory=list)
+    measurements: list[TelemetryValue] = Field(default_factory=list)
     source_file: str

@@ -38,6 +38,12 @@ equipment source ID so per-equipment order is stable within a partition. Replayi
 group while database idempotency prevents duplicate business effects. Late history is retained but cannot
 replace a newer current value.
 
+The simulator retains source-file row order and publishes snapshots through Redpanda; it never writes to the
+database. Ingestion performs canonical equipment/point resolution in one transaction and manually commits
+the broker offset afterward. Event and source-record uniqueness makes replay idempotent. Observation history
+uses source time, while the current table advances only when source time is newer. Empty measurements and
+absent device intervals create no rows; freshness/staleness is computed later rather than synthesized.
+
 ## Relational ontology
 
 `ontology_entities` gives spaces, equipment, and points a common identity and Brick class.
