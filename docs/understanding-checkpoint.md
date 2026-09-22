@@ -7,10 +7,10 @@ multiple buildings, with enough topology and evidence to identify affected tenan
 
 ## 2. System boundary
 
-The target system replays supplied data, ingests and stores telemetry, models the portfolio relationally,
-evaluates the required AFDD rule in a separate worker, and exposes rule preview and issue evidence APIs.
-Device connectivity, work orders, notifications, dashboard implementation, AI authoring, and bonus features
-are outside scope.
+The implemented system replays supplied data, ingests and stores telemetry, models the portfolio relationally,
+evaluates the required AFDD rule in a separate worker, and exposes APIs plus an operations dashboard. AI
+assistance is limited to a human-gated draft workflow over the same rule DSL. Live device connectivity, work
+orders, notifications, autonomous control, and bonus features are outside scope.
 
 ## 3. Domain interpretation
 
@@ -43,10 +43,11 @@ a new occurrence. The default freshness is 120 seconds, and one property may ove
 
 ## 7. Architecture and risks
 
-CSV simulator -> Redpanda -> ingestion -> TimescaleDB; accepted events also feed the AFDD worker. FastAPI
-and the React client read platform state from PostgreSQL. The primary risks are event ordering/idempotency,
-incorrect topology, and misleading conclusions from absent or stale data; mitigations are detailed in
-`architecture.md`.
+CSV simulator -> Redpanda -> ingestion -> TimescaleDB; the independent AFDD worker evaluates accepted stored
+events deterministically. FastAPI and React read PostgreSQL projections. AI interpretation is untrusted until
+server validation, ontology resolution, preview, and human confirmation. The primary risks are event
+ordering/idempotency, incorrect topology, and misleading conclusions from absent or stale data; mitigations
+are detailed in `architecture.md`.
 
 ## 8. Assumptions and clarification questions
 

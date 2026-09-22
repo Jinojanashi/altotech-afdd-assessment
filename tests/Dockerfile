@@ -5,8 +5,8 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir '.[dev]'
-COPY apps/__init__.py ./apps/__init__.py
-COPY apps/api ./apps/api
+COPY apps ./apps
+COPY db/migrations ./db/migrations
 COPY tests ./tests
 COPY data/candidate-starter-pack/building-and-equipment ./data/candidate-starter-pack/building-and-equipment
 COPY data/candidate-starter-pack/sample-telemetry ./data/candidate-starter-pack/sample-telemetry

@@ -25,13 +25,17 @@ Clarification resumes the same request. Review displays original intent, constra
 
 Interpretation is attempted at most twice. Malformed output or provider failure is persisted with retry count and stop reason. The only supported rule semantics are the existing observed-time `SAT_ABSOLUTE_DEVIATION` rule with `RUN=ON`, `SAT`, `SAT_SP`, operator `>`, and `degC`. AI authoring does not add new evaluator logic or control equipment.
 
-Automated tests use deterministic fake clients and never require a network or API key. To make one real call without activation:
+Automated tests use deterministic fake clients and never require a network or API key. To make one real call without activation, put the key only in ignored `.env` and run:
 
 ```bash
-OPENAI_API_KEY=... OPENAI_MODEL=gpt-5-mini \
 docker compose run --rm api python -m afdd.ai_demo
 ```
 
+The recorded real `openai/gpt-5.6-terra` attempt reached the provider, made two calls with one bounded retry,
+and ended `FAILED` after HTTP 429 in approximately 5,408 ms. The persisted record had no human confirmation or
+activation result. This validates the provider failure path only. A successful real run reaching
+`READY_FOR_REVIEW` with a non-empty preview and no activation is still required before submission.
+
 ## AI-assistance disclosure
 
-Codex was used to inspect the assessment, propose implementation code, and run validation. Generated work was reviewed through migration execution, deterministic scenario tests, full backend/frontend suites, lint, typecheck, and end-to-end API checks. One generated design idea—placing model-proposed asset IDs directly into the rule draft—was rejected; the implemented workflow resolves every property/floor reference against the current server ontology before validation and preview.
+Codex was used to inspect the assessment, propose implementation code, and run validation. Generated work was reviewed through migration execution, deterministic scenario tests, full backend/frontend suites, lint, typecheck, and end-to-end API checks. One generated design idea—placing model-proposed asset IDs directly into the rule draft—was rejected; the implemented workflow resolves every property/floor reference against the current server ontology before validation and preview. The full disclosure and concrete corrections are in [`ai-assistance.md`](ai-assistance.md).

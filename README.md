@@ -1,134 +1,135 @@
-# AFDD Assessment
+# AFDD assessment
 
-Initial project skeleton for the Senior Full Stack Engineer AFDD assessment.
+A reviewable full-stack Automatic Fault Detection and Diagnostics system for the supplied three-building
+portfolio. It replays source snapshots through Redpanda, resolves them against a PostgreSQL relational
+ontology, stores history in TimescaleDB, evaluates a versioned rule in a separate worker, and exposes an
+operations dashboard plus a human-gated AI rule-authoring workflow.
 
-## Services
+The hero case is `ahu-a-f02-east`: a sustained supply-air temperature deviation qualifies at 10:00 UTC,
+opens a Critical issue at 10:15, and recovers at 10:21. Its installation room, served HVAC zone, affected
+occupied rooms, exact rule version, and opening evidence remain inspectable.
 
-- `simulator`: replays the supplied CSV snapshots into Redpanda.
-- `ingestion`: validates and persists telemetry events.
-- `worker`: evaluates AFDD rules from accepted telemetry.
-- `api`: FastAPI application for platform APIs.
-- `web`: React and TypeScript operations dashboard.
-- `db`: PostgreSQL with TimescaleDB.
-- `redpanda`: Kafka-compatible event broker.
+## Quick start
 
-The dashboard, ingestion pipeline, and deterministic AFDD evaluator are implemented as focused assessment
-milestones. AI-assisted rule authoring is intentionally out of scope.
-
-## Local setup
+Requirements: Docker with Compose v2 and Make. No API key is required for the core product.
 
 ```bash
 cp .env.example .env
-docker compose up --build
+make demo
 ```
 
-The API health endpoint is available at `http://localhost:8000/health` and the web shell at
-`http://localhost:3000`. Database migrations run once before the application services start.
+`make demo` builds the images, starts healthy dependencies, migrates, resets/reseeds the application data,
+seeds a second time to prove idempotency, replays the complete source data, waits for exact ingestion counts,
+runs deterministic AFDD evaluation, verifies evidence, and checks the API/web routes. Any failed stage exits
+non-zero. Re-running it produces the same business results; generated UUIDs and receipt timestamps may differ.
 
-See [`docs/architecture.md`](docs/architecture.md) for the design and
-[`docs/understanding-checkpoint.md`](docs/understanding-checkpoint.md) for the assessment checkpoint.
+Open:
 
-## Database inventory
+- Dashboard: <http://localhost:3000/portfolio>
+- AI authoring: <http://localhost:3000/rules/new/ai>
+- Swagger UI: <http://localhost:8000/docs>
+- OpenAPI JSON: <http://localhost:8000/openapi.json>
 
-Run the canonical inventory migration and seed it from the supplied registers:
+Expected verified result: 465 canonical entities (93 spaces, 84 equipment, 288 points), 888 explicit
+relationships, 30,235 accepted deliveries, one duplicate, one rejected unknown device, 103,649 historical
+observations, 288 current points, and two recovered issues (`ahu-a-f02-east` plus the Building B override
+case `ahu-b-f01-west`).
+
+## Reviewer journey
+
+Use the 5–10 minute [demonstration guide](docs/demonstration-guide.md). It covers system health, the hero
+issue and evidence timeline, installation versus affected spaces, rule preview/exclusions, the Building B
+override, non-trigger cases, ingestion exceptions, and the AI trust boundary. A precise evidence-capture
+sequence is in [the screenshot walkthrough](docs/screenshot-walkthrough.md).
+Exact commands and observed results are recorded in the [final validation report](docs/validation-report.md).
+
+## Architecture and stack
+
+```text
+source CSVs -> simulator -> Redpanda -> ingestion -> PostgreSQL/TimescaleDB
+                                                        ^          ^
+                                                        |          |
+                                               FastAPI API    AFDD worker
+                                                    ^
+                                              React + TypeScript
+```
+
+Python 3.12, FastAPI, React/TypeScript, PostgreSQL with TimescaleDB, Redpanda, Alembic, and Docker Compose
+are used. Simulator, ingestion, worker, API, and web are separate services. The ontology is relational;
+Neo4j/RDF infrastructure is intentionally absent.
+
+Key paths are `apps/` (service entry points/web), `src/afdd/` (domain logic), `db/migrations/`, `tests/`,
+`docs/`, and the immutable `data/candidate-starter-pack/` input. See [architecture](docs/architecture.md),
+[technical decisions](docs/technical-decisions.md), and the [requirement matrix](docs/requirements-checklist.md).
+
+## Commands
 
 ```bash
-docker compose up -d db
+make demo          # deterministic end-to-end reviewer environment
+make reset         # reset/reseed application data; keeps Docker volumes
+make test          # complete backend and frontend tests
+make lint          # Ruff, compileall, TS production build, Compose config, diff check
+make demo-reset    # destructive: stop services and remove local demo volumes
+```
+
+Manual migration/seed commands, if needed:
+
+```bash
+docker compose up -d --wait db
 docker compose run --rm migrate
 docker compose --profile tools run --rm seed
-```
-
-The seed is idempotent: rerunning the last command updates the same canonical entities and does not create
-duplicate edges. For a local review reset, which clears canonical inventory and all dependent local data,
-run:
-
-```bash
 docker compose --profile tools run --rm seed python -m afdd.seed --reset
 ```
 
-Ontology inspection endpoints are `GET /properties`, `GET /entities/{source_id}`,
-`GET /entities/{source_id}/relationships`, `GET /equipment/{source_id}/datapoints`, and
-`GET /equipment/{source_id}/topology`.
+The last command clears local canonical, telemetry, rule, issue, and AI audit data before reseeding. It never
+changes starter-pack files.
 
-The relational ontology preserves separate concepts for where an AHU is installed (`hasLocation`) and the
-HVAC zone it serves (`feeds`); affected rooms are reached through the served zone's explicit containment
-edges, never from a readable identifier.
+## Source facts versus implementation decisions
 
-## Telemetry pipeline
+Source-supplied facts include 3 buildings, 12 floors, 24 zones, 48 occupied rooms, 24 AHUs, 48 IAQ sensors,
+12 floor meters, 288 datapoints, 60-second expected samples, explicit source relationships, and deliberate
+duplicate/late/gap/blank/unknown/fault scenarios. The assessment also requires a >3°C, continuous 15-minute
+AHU condition and one local override.
 
-The simulator publishes one versioned device-snapshot event per CSV row to the six-partition
-`telemetry.raw.v1` Redpanda topic. File order is deterministic (`ahu`, `iaq`, then `power`) and row order
-within each source file is preserved, including the deliberate late and duplicate rows. Blank measurements
-are omitted; the platform never interpolates gaps or creates synthetic `GOOD` observations.
+Candidate decisions include a 120-second freshness allowance, UUIDv5 transport identity, database-enforced
+idempotency, observed-time evaluation, immediate trusted recovery, immutable rule versions, persisted issue
+evidence, a 2°C Building B override, Redpanda topic/partition settings, and Brick-aligned relationships stored
+in PostgreSQL. Missing input remains missing; it is never interpolated into a normal reading.
 
-```bash
-docker compose up -d db redpanda
-docker compose run --rm migrate
-docker compose --profile tools run --rm seed
-docker compose up -d ingestion
-docker compose --profile telemetry run --rm simulator python -m apps.simulator.main --delay-seconds 0
-```
+`hasLocation` means physical installation, `feeds` means the HVAC zone served, `hasPart` traverses to affected
+rooms, `hasPoint` means device point ownership, and `meters` means measurement scope. Thus a plant room is
+not an affected tenant room, and a floor meter is contextual to a floor rather than owned by an AHU.
 
-Replay uses stable UUIDv5 event IDs derived from `(source, source_record_id)`. The consumer commits a Kafka
-offset only after its database transaction succeeds. Canonical history is protected by database uniqueness;
-each later delivery is recorded as `DUPLICATE` without another observation. Current state advances only for
-a greater device `observed_at` (equal timestamps use event ID as a deterministic tie-breaker), never receipt
-order.
+Full AFDD timing/lifecycle semantics are in [AFDD rule engine](docs/afdd.md). API groups cover operations,
+ontology, telemetry, rules/preview, issues, portfolio projections, and AI authoring.
 
-Transport events contain `schema_version`, `event_id`, `source`, `source_record_id`, `equipment_id`,
-`equipment_type`, `observed_at`, `received_at`, `source_file`, and a measurement list. Ingestion resolves
-point identity, data type, ownership, and engineering unit from the canonical registry. Valid reported values
-are `GOOD`; invalid/unknown events are audited as `REJECTED`. Missing and stale values are derived on read or
-evaluation and are not persisted as fake observations.
+## AI-assisted authoring
 
-Useful inspection commands:
+The model can only return a constrained interpretation. Server code resolves current ontology IDs, validates
+the existing rule DSL, previews targets/exclusions, and requires explicit human confirmation before creating
+or activating anything. Bounded tools cannot execute arbitrary SQL/code, create assets, or activate rules.
+Fake-provider tests cover supported/paraphrased prompts, clarification, injection/unsupported logic, invented
+assets, ontology changes, malformed output/retry, missing provider, and idempotent confirmation.
 
-```bash
-docker compose exec redpanda rpk topic describe telemetry.raw.v1
-docker compose exec db psql -U afdd -d afdd -c "SELECT processing_status, count(*) FROM ingestion_events GROUP BY 1"
-curl http://localhost:8000/ingestion/status
-curl http://localhost:8000/telemetry/equipment/ahu-a-f01-east/latest
-```
-
-## AFDD rule evaluation
-
-The supplied SAT-deviation rule is a validated, versioned DSL with ontology-based target preview. Rule
-versions and their property overrides are immutable. The default demonstration scope selects the eight
-office floors in Buildings A and B; Building B has an explicit 2.0°C threshold override while all other
-targets use 3.0°C. See [docs/afdd.md](docs/afdd.md) for exact timing, freshness, recovery, recurrence, and
-evidence semantics.
-
-After telemetry ingestion, create/activate the default rule, clear prior evaluation results, and replay all
-accepted events deterministically:
-
-```bash
-docker compose run --rm worker python -m apps.worker.main \
-  --ensure-default-rule --reset --once
-curl http://localhost:8000/rules
-curl http://localhost:8000/issues
-```
-
-Rule validation and preview are available through `POST /rules/validate` and `POST /rules/preview`. Stored
-versions can be previewed at `GET /rules/{rule_id}/versions/{version}/preview`; evaluation remains in the
-separate worker and is never performed by an API request.
-# AFDD assessment
-
-## Operations dashboard
-
-Start the full local demo with `docker compose up --build`, then open [http://localhost:3000/portfolio](http://localhost:3000/portfolio). The API is available at [http://localhost:8000](http://localhost:8000).
-
-The focused routes are `/portfolio`, `/issues/{issueId}`, and `/rules/{ruleId}`. Portfolio uses the read-only `/portfolio` projection for canonical building/floor/zone/AHU navigation and operational health; `/equipment/{sourceId}/context` exposes room IAQ and floor-meter context without treating a floor meter as an AHU point.
-
-For the hero journey, open Building A in Portfolio, select `ahu-a-f02-east`, then select its Critical recent issue. The investigation explicitly shows its plant-room installation separately from the served HVAC zone and potentially affected rooms, then links to the rule preview where the Building B override is visible.
-
-## AI-assisted rule authoring
-
-Open `http://localhost:3000/rules/new/ai` for the safe authoring workflow. Configure `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in `.env`; without a key the request fails safely and records the reason. The model only proposes structured intent. Server-side ontology discovery, DSL validation, target preview, human review, and explicit confirmation are mandatory.
-
-Run one real-model interpretation and preview without activation with:
+For a later real-provider review-state run, place a key only in ignored `.env`, set `OPENAI_MODEL`, seed the
+ontology, then run:
 
 ```bash
 docker compose run --rm api python -m afdd.ai_demo
 ```
 
-See [docs/ai-authoring.md](docs/ai-authoring.md) for states, trust boundaries, bounded tools, retries, limitations, and the AI-assistance disclosure.
+A real `openai` request with `gpt-5.6-terra` reached the provider but failed safely with HTTP 429 after two
+calls/one bounded retry (5,408 ms); no confirmation or activation occurred. This is failure-path evidence
+only. **Required before submission:** complete one successful real-model run through interpretation, server
+validation, ontology resolution, and non-empty preview to `READY_FOR_REVIEW`, without activation.
+
+See [AI authoring](docs/ai-authoring.md) and [AI-assistance disclosure](docs/ai-assistance.md).
+
+## Known limitations
+
+- The successful real-model evidence above remains a required blocker until provider capacity/quota permits.
+- The demo uses one broker node and synchronous database-backed evaluation; production would add HA,
+  observability, secret management, retention policies, and horizontally partitioned workers.
+- Screenshots are supplied as an exact capture checklist because browser capture was unavailable in this
+  environment; no images are fabricated.
+- Acknowledgement/work-order workflows and all bonus requirements are intentionally out of scope.

@@ -2,9 +2,9 @@
 
 ## Scope
 
-This repository provides the deployable foundation for replaying the supplied telemetry, ingesting it,
-evaluating the required AHU fault rule, and exposing results through an API and web application. It does
-not implement the dashboard or AI rule authoring. Source CSVs remain immutable inputs.
+This repository replays the supplied telemetry, ingests it, evaluates the required AHU fault rule, and
+exposes results through an API, operations dashboard, and human-gated AI authoring workflow. Source CSVs
+remain immutable inputs; bonus features are outside scope.
 
 ## Components
 
@@ -21,7 +21,8 @@ web -> FastAPI API ------------------------------------------> PostgreSQL <- AFD
   writes history idempotently, and only updates current state when `observed_at` is newer.
 - **AFDD worker:** independently polls accepted persisted events and maintains deterministic state per rule
   version/equipment. A resettable one-shot mode provides reproducible assessment replay.
-- **API/web:** FastAPI is the service boundary; React/TypeScript is currently an application shell.
+- **API/web:** FastAPI exposes ontology, telemetry, rule, issue, operations, and AI-authoring APIs;
+  React/TypeScript provides the focused reviewer dashboard and human review/confirmation UI.
 - **Storage:** PostgreSQL stores application state and a relational Brick-aligned ontology. TimescaleDB
   hypertables store time-series readings. Neo4j is intentionally not used.
 
@@ -68,6 +69,13 @@ may change threshold or duration without affecting other properties.
 
 Full rule targeting, timing boundaries, late-event behavior, lifecycle, and evidence are documented in
 [`afdd.md`](afdd.md).
+
+## AI trust boundary
+
+The provider returns only a schema-constrained interpretation. Server-owned bounded tools resolve all
+property/floor references against the current ontology, build the existing rule DSL, validate and preview it,
+and persist a state/tool trace. Only the human confirmation endpoint can create and activate a rule. Provider
+errors, malformed output, unknown assets, unsupported logic, and ontology drift stop safely.
 
 ## Main risks
 
