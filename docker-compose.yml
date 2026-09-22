@@ -1,0 +1,147 @@
+name: afdd-assessment
+
+x-python-service: &python-service
+  env_file:
+    - path: .env
+      required: false
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redpanda:
+      condition: service_healthy
+
+services:
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-afdd}
+      POSTGRES_USER: ${POSTGRES_USER:-afdd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-afdd-local-only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redpanda:
+    image: redpandadata/redpanda:v24.2.18
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+      - "9644:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --exit-when-healthy"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://afdd:afdd-local-only@db:5432/afdd}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  seed:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://afdd:afdd-local-only@db:5432/afdd}
+    command: ["python", "-m", "afdd.seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["tools"]
+    restart: "no"
+
+  simulator:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: apps/simulator/Dockerfile
+
+  ingestion:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: apps/ingestion/Dockerfile
+
+  worker:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+
+  api:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  test:
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://afdd:afdd-local-only@db:5432/afdd}
+      SEED_SOURCE_DIR: /app/data/candidate-starter-pack/building-and-equipment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["test"]
+    restart: "no"
+
+volumes:
+  postgres_data:
+  redpanda_data:

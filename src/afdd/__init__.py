@@ -1,0 +1,2 @@
+"""Shared AFDD platform package."""
+
