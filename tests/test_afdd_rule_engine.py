@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DatabaseError
 
+from afdd.backtest import backtest_rule_version
 from afdd.evaluator import (
     EvaluationSample,
     InputReading,
@@ -328,3 +329,115 @@ def test_deterministic_replay_and_minimal_api(afdd_engine, case_events) -> None:
     assert issues_response.status_code == 200 and len(issues_response.json()) == 1
     detail = client.get(f"/issues/{second_issue['id']}")
     assert detail.status_code == 200 and detail.json()["evidence"]["rule"]["version"] == 1
+
+
+def test_read_only_historical_backtest_and_what_if(afdd_engine, case_events) -> None:
+    for equipment_id in (
+        "ahu-a-f02-east",
+        "ahu-a-f03-west",
+        "ahu-b-f01-west",
+        "ahu-b-f04-east",
+    ):
+        store_events(afdd_engine, case_events[equipment_id])
+    version = create_rule(afdd_engine, default_sat_rule())
+    rule_before = get_rule(afdd_engine, version["rule_id"])
+    with afdd_engine.connect() as connection:
+        state_before = connection.execute(
+            text(
+                """
+                SELECT (SELECT count(*) FROM afdd_issues) AS issues,
+                       (SELECT count(*) FROM afdd_evaluation_states) AS states,
+                       (SELECT count(*) FROM telemetry_readings) AS readings,
+                       (SELECT count(*) FROM current_point_values) AS current_values
+                """
+            )
+        ).one()
+
+    window = {
+        "start": datetime(2026, 1, 15, 8, tzinfo=UTC),
+        "end": datetime(2026, 1, 15, 14, tzinfo=UTC),
+    }
+    inherited = backtest_rule_version(
+        afdd_engine, rule_id=version["rule_id"], version=1, **window
+    )
+    inherited_b = next(
+        result for result in inherited["results"] if result["equipment_id"] == "ahu-b-f01-west"
+    )
+    assert inherited_b["would_trigger"] is True
+    assert inherited_b["effective_threshold"] == 2.0
+    assert inherited_b["effective_override"] == {
+        "property_id": "building-b",
+        "threshold": 2.0,
+    }
+
+    threshold_three = backtest_rule_version(
+        afdd_engine,
+        rule_id=version["rule_id"],
+        version=1,
+        threshold=3.0,
+        duration_seconds=900,
+        **window,
+    )
+    repeated = backtest_rule_version(
+        afdd_engine,
+        rule_id=version["rule_id"],
+        version=1,
+        threshold=3.0,
+        duration_seconds=900,
+        **window,
+    )
+    assert repeated == threshold_three
+    by_equipment = {result["equipment_id"]: result for result in threshold_three["results"]}
+    hero = by_equipment["ahu-a-f02-east"]
+    assert hero["would_trigger"] is True
+    assert hero["qualifying_started_at"] == "2026-01-15T10:00:00+00:00"
+    assert hero["would_open_at"] == "2026-01-15T10:15:00+00:00"
+    assert hero["would_recover_at"] == "2026-01-15T10:21:00+00:00"
+    assert by_equipment["ahu-a-f03-west"]["would_trigger"] is False
+    assert by_equipment["ahu-a-f03-west"]["non_trigger_reason"] == "DURATION_NOT_MET"
+    assert by_equipment["ahu-b-f04-east"]["would_trigger"] is False
+    assert by_equipment["ahu-b-f04-east"]["non_trigger_reason"] == "AHU_OFF"
+    assert by_equipment["ahu-b-f01-west"]["would_trigger"] is False
+
+    threshold_two = backtest_rule_version(
+        afdd_engine,
+        rule_id=version["rule_id"],
+        version=1,
+        threshold=2.0,
+        duration_seconds=900,
+        **window,
+    )
+    b_what_if = next(
+        result for result in threshold_two["results"] if result["equipment_id"] == "ahu-b-f01-west"
+    )
+    assert b_what_if["would_trigger"] is True
+    assert b_what_if["qualifying_started_at"] == "2026-01-15T11:20:00+00:00"
+    assert b_what_if["would_open_at"] == "2026-01-15T11:35:00+00:00"
+    assert b_what_if["would_recover_at"] == "2026-01-15T11:41:00+00:00"
+
+    response = TestClient(app).post(
+        f"/rules/{version['rule_id']}/versions/1/backtest",
+        json={
+            "start": window["start"].isoformat(),
+            "end": window["end"].isoformat(),
+            "threshold": 3.0,
+            "duration_seconds": 900,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["simulation"] is True
+    assert response.json()["persistence"] == "READ_ONLY"
+
+    with afdd_engine.connect() as connection:
+        state_after = connection.execute(
+            text(
+                """
+                SELECT (SELECT count(*) FROM afdd_issues) AS issues,
+                       (SELECT count(*) FROM afdd_evaluation_states) AS states,
+                       (SELECT count(*) FROM telemetry_readings) AS readings,
+                       (SELECT count(*) FROM current_point_values) AS current_values
+                """
+            )
+        ).one()
+    assert state_after == state_before
+    assert get_rule(afdd_engine, version["rule_id"]) == rule_before

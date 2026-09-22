@@ -12,6 +12,7 @@ from afdd.ai_authoring import (
     create_authoring_request,
     get_request,
 )
+from afdd.backtest import backtest_rule_version
 from afdd.dashboard import equipment_context, operations_status, portfolio
 from afdd.evaluator import get_issue, list_issues
 from afdd.ontology import (
@@ -66,6 +67,13 @@ class AuthoringPrompt(BaseModel):
 
 class ClarificationAnswer(BaseModel):
     answer: str = Field(min_length=1, max_length=5_000)
+
+
+class BacktestRequest(BaseModel):
+    start: datetime
+    end: datetime
+    threshold: float | None = Field(default=None, gt=0)
+    duration_seconds: int | None = Field(default=None, gt=0)
 
 
 @app.post("/ai/authoring-requests", tags=["ai-authoring"], status_code=201)
@@ -237,6 +245,24 @@ def preview_rule_version(rule_id: str, version: int) -> dict:
         return preview_draft(ontology_engine(), draft)
     except (LookupError, ValueError) as exc:
         raise HTTPException(status_code=404, detail="Rule version not found") from exc
+
+
+@app.post("/rules/{rule_id}/versions/{version}/backtest", tags=["rules"])
+def backtest_version(rule_id: str, version: int, body: BacktestRequest) -> dict:
+    try:
+        return backtest_rule_version(
+            ontology_engine(),
+            rule_id=rule_id,
+            version=version,
+            start=body.start,
+            end=body.end,
+            threshold=body.threshold,
+            duration_seconds=body.duration_seconds,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Rule version not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/rules/{rule_id}/versions/{version}/activate", tags=["rules"])

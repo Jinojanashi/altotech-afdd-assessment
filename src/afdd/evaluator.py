@@ -27,6 +27,22 @@ class EvaluationSample:
     event_id: str | None = None
 
 
+@dataclass(frozen=True)
+class EvaluationTransition:
+    """Pure state-machine output shared by live evaluation and read-only simulations."""
+
+    outcome: str
+    state: str
+    last_observed_at: datetime | None
+    qualifying_started_at: datetime | None
+    qualifying_evidence: list[dict[str, Any]]
+    evidence: dict[str, Any] | None = None
+    issue_action: str | None = None
+    issue_started_at: datetime | None = None
+    issue_reason: str | None = None
+    persist_state: bool = True
+
+
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
@@ -262,6 +278,108 @@ def _close_issue(
     )
 
 
+def evaluate_transition(
+    *,
+    state: dict[str, Any],
+    draft: RuleDraft,
+    target: dict[str, Any],
+    sample: EvaluationSample,
+) -> EvaluationTransition:
+    """Advance the AFDD state machine without reading or writing persistent state."""
+
+    sample = EvaluationSample(
+        sample.equipment_id, _as_utc(sample.observed_at), sample.readings, sample.event_id
+    )
+    threshold = float(target["effective_threshold"])
+    duration_seconds = int(target["effective_duration_seconds"])
+    freshness_seconds = draft.logic.freshness_seconds
+    evidence, trustworthy = _sample_evidence(
+        sample, list(draft.scope.required_points), freshness_seconds
+    )
+    last_observed = state.get("last_observed_at")
+    if last_observed is not None and sample.observed_at <= _as_utc(last_observed):
+        return EvaluationTransition(
+            outcome="IGNORED_LATE_OR_EQUAL",
+            state=state["state"],
+            last_observed_at=last_observed,
+            qualifying_started_at=state.get("qualifying_started_at"),
+            qualifying_evidence=list(state.get("qualifying_evidence") or []),
+            persist_state=False,
+        )
+
+    current_state = state["state"]
+    started = state.get("qualifying_started_at")
+    window = list(state.get("qualifying_evidence") or [])
+    if last_observed is not None:
+        gap = (sample.observed_at - _as_utc(last_observed)).total_seconds()
+        if gap > freshness_seconds and current_state == "QUALIFYING":
+            current_state, started, window = "NORMAL", None, []
+
+    if not trustworthy:
+        return EvaluationTransition(
+            outcome="UNTRUSTWORTHY_INPUT",
+            state="OPEN" if current_state == "OPEN" else "NORMAL",
+            last_observed_at=sample.observed_at,
+            qualifying_started_at=None,
+            qualifying_evidence=[],
+            evidence=evidence,
+            issue_reason="UNTRUSTWORTHY_INPUT",
+        )
+
+    run_on = str(sample.readings["RUN"].value).upper() == "ON"
+    difference = float(evidence["absolute_difference"])
+    qualifies = run_on and difference > threshold
+    if not qualifies:
+        reason = "AHU_OFF" if not run_on else "CONDITION_CLEARED"
+        return EvaluationTransition(
+            outcome="CLOSED" if current_state == "OPEN" else "NORMAL",
+            state="NORMAL",
+            last_observed_at=sample.observed_at,
+            qualifying_started_at=None,
+            qualifying_evidence=[],
+            evidence=evidence,
+            issue_action="CLOSE" if current_state == "OPEN" else None,
+            issue_reason=reason,
+        )
+
+    if current_state == "OPEN":
+        return EvaluationTransition(
+            outcome="REMAINS_OPEN",
+            state="OPEN",
+            last_observed_at=sample.observed_at,
+            qualifying_started_at=None,
+            qualifying_evidence=[],
+            evidence=evidence,
+        )
+
+    if current_state == "NORMAL" or started is None:
+        started = sample.observed_at
+        window = [evidence]
+    else:
+        started = _as_utc(started)
+        window.append(evidence)
+    if (sample.observed_at - started).total_seconds() >= duration_seconds:
+        return EvaluationTransition(
+            outcome="OPENED",
+            state="OPEN",
+            last_observed_at=sample.observed_at,
+            qualifying_started_at=None,
+            qualifying_evidence=[],
+            evidence=evidence,
+            issue_action="OPEN",
+            issue_started_at=started,
+        )
+
+    return EvaluationTransition(
+        outcome="QUALIFYING",
+        state="QUALIFYING",
+        last_observed_at=sample.observed_at,
+        qualifying_started_at=started,
+        qualifying_evidence=window,
+        evidence=evidence,
+    )
+
+
 def evaluate_sample(
     engine: Engine,
     *,
@@ -273,87 +391,10 @@ def evaluate_sample(
     sample: EvaluationSample,
 ) -> str:
     """Advance one rule/equipment state; returns a traceable transition outcome."""
-
-    sample = EvaluationSample(
-        sample.equipment_id, _as_utc(sample.observed_at), sample.readings, sample.event_id
-    )
-    threshold = float(target["effective_threshold"])
-    duration_seconds = int(target["effective_duration_seconds"])
-    freshness_seconds = draft.logic.freshness_seconds
-    evidence, trustworthy = _sample_evidence(
-        sample, list(draft.scope.required_points), freshness_seconds
-    )
     with engine.begin() as connection:
         state = _load_state(connection, version_id, target["canonical_equipment_id"])
-        last_observed = state["last_observed_at"]
-        if last_observed is not None and sample.observed_at <= _as_utc(last_observed):
-            return "IGNORED_LATE_OR_EQUAL"
-
-        current_state = state["state"]
-        started = state["qualifying_started_at"]
-        window = list(state["qualifying_evidence"])
-        if last_observed is not None:
-            gap = (sample.observed_at - _as_utc(last_observed)).total_seconds()
-            if gap > freshness_seconds and current_state == "QUALIFYING":
-                current_state, started, window = "NORMAL", None, []
-
-        if not trustworthy:
-            next_state = "OPEN" if current_state == "OPEN" else "NORMAL"
-            _save_state(
-                connection,
-                version_id,
-                target["canonical_equipment_id"],
-                next_state,
-                sample.observed_at,
-                None,
-                [],
-            )
-            return "UNTRUSTWORTHY_INPUT"
-
-        run_on = str(sample.readings["RUN"].value).upper() == "ON"
-        difference = float(evidence["absolute_difference"])
-        qualifies = run_on and difference > threshold
-        if not qualifies:
-            reason = "AHU_OFF" if not run_on else "CONDITION_CLEARED"
-            if current_state == "OPEN":
-                _close_issue(
-                    connection,
-                    version_id,
-                    target["canonical_equipment_id"],
-                    sample.observed_at,
-                    reason,
-                    evidence,
-                )
-            _save_state(
-                connection,
-                version_id,
-                target["canonical_equipment_id"],
-                "NORMAL",
-                sample.observed_at,
-                None,
-                [],
-            )
-            return "CLOSED" if current_state == "OPEN" else "NORMAL"
-
-        if current_state == "OPEN":
-            _save_state(
-                connection,
-                version_id,
-                target["canonical_equipment_id"],
-                "OPEN",
-                sample.observed_at,
-                None,
-                [],
-            )
-            return "REMAINS_OPEN"
-
-        if current_state == "NORMAL" or started is None:
-            started = sample.observed_at
-            window = [evidence]
-        else:
-            started = _as_utc(started)
-            window.append(evidence)
-        if (sample.observed_at - started).total_seconds() >= duration_seconds:
+        transition = evaluate_transition(state=state, draft=draft, target=target, sample=sample)
+        if transition.issue_action == "OPEN":
             _open_issue(
                 connection,
                 rule_id=rule_id,
@@ -361,33 +402,32 @@ def evaluate_sample(
                 version=version,
                 draft=draft,
                 target=target,
-                started_at=started,
-                opened_at=sample.observed_at,
-                threshold=threshold,
-                duration_seconds=duration_seconds,
-                window=window,
+                started_at=transition.issue_started_at,
+                opened_at=transition.last_observed_at,
+                threshold=float(target["effective_threshold"]),
+                duration_seconds=int(target["effective_duration_seconds"]),
+                window=list(state.get("qualifying_evidence") or []) + [transition.evidence],
             )
+        elif transition.issue_action == "CLOSE":
+            _close_issue(
+                connection,
+                version_id,
+                target["canonical_equipment_id"],
+                transition.last_observed_at,
+                transition.issue_reason,
+                transition.evidence,
+            )
+        if transition.persist_state:
             _save_state(
                 connection,
                 version_id,
                 target["canonical_equipment_id"],
-                "OPEN",
-                sample.observed_at,
-                None,
-                [],
+                transition.state,
+                transition.last_observed_at,
+                transition.qualifying_started_at,
+                transition.qualifying_evidence,
             )
-            return "OPENED"
-
-        _save_state(
-            connection,
-            version_id,
-            target["canonical_equipment_id"],
-            "QUALIFYING",
-            sample.observed_at,
-            started,
-            window,
-        )
-        return "QUALIFYING"
+        return transition.outcome
 
 
 def evaluate_rule_version(engine: Engine, rule_id: str, version: int) -> dict[str, Any]:

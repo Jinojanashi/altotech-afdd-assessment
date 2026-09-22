@@ -115,6 +115,18 @@ not an affected tenant room, and a floor meter is contextual to a floor rather t
 Full AFDD timing/lifecycle semantics are in [AFDD rule engine](docs/afdd.md). API groups cover operations,
 ontology, telemetry, rules/preview, issues, portfolio projections, and AI authoring.
 
+## Historical Backtesting (Bonus)
+
+The Rule Detail screen can run a historical what-if simulation for an immutable rule version and selected
+UTC window. An engineer may override threshold and duration for the simulation; without those values,
+property-specific overrides from that version remain effective. The response identifies matched/excluded
+targets, hypothetical qualification/open/recovery times, effective values, and useful non-trigger reasons.
+
+Backtesting reuses the production ontology resolver and deterministic AFDD state transition. It is explicitly
+read-only: it does not activate a rule, create issues, update evaluator state, or change telemetry. The first
+implementation is intentionally limited to the existing SAT absolute-deviation DSL and evaluates only
+observations inside the requested window; it does not carry qualification state in from before the window.
+
 ## AI-assisted authoring
 
 The model can only return a constrained interpretation. Server code resolves current ontology IDs, validates
@@ -147,4 +159,4 @@ See [AI authoring](docs/ai-authoring.md) and [AI-assistance disclosure](docs/ai-
   observability, secret management, retention policies, and horizontally partitioned workers.
 - Screenshots are supplied as an exact capture checklist because browser capture was unavailable in this
   environment; no images are fabricated.
-- Acknowledgement/work-order workflows and all bonus requirements are intentionally out of scope.
+- Acknowledgement/work-order workflows and bonus requirements other than historical backtesting are out of scope.
