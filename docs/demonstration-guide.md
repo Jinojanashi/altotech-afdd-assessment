@@ -67,7 +67,7 @@ activate rule** is clicked; the model itself has no activation tool. Do not conf
 
 Without `OPENAI_API_KEY`, submission stops safely in `FAILED` and records the reason. Deterministic fake-model
 coverage is run by `make test`. To attempt the real provider later, put the key only in ignored `.env`, choose
-`OPENAI_MODEL`, and run `docker compose run --rm api python -m afdd.ai_demo`. The recorded real
+`OPENAI_MODEL`, and run `make ai-live-demo` after `make demo`. The recorded real
 `gpt-5.6-terra` attempt reached OpenAI but ended in HTTP 429 after one retry; that proves only the failure path.
 A successful real run reaching `READY_FOR_REVIEW` without confirmation is still required before submission.
 

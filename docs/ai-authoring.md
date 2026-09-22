@@ -28,8 +28,11 @@ Interpretation is attempted at most twice. Malformed output or provider failure 
 Automated tests use deterministic fake clients and never require a network or API key. To make one real call without activation, put the key only in ignored `.env` and run:
 
 ```bash
-docker compose run --rm api python -m afdd.ai_demo
+make ai-live-demo
 ```
+
+The target first runs `make verify-demo`, prints only sanitized workflow evidence, never calls confirmation,
+and exits non-zero unless the supported request reaches `READY_FOR_REVIEW`.
 
 The recorded real `openai/gpt-5.6-terra` attempt reached the provider, made two calls with one bounded retry,
 and ended `FAILED` after HTTP 429 in approximately 5,408 ms. The persisted record had no human confirmation or

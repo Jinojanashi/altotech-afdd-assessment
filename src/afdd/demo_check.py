@@ -219,6 +219,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wait", action="store_true", help="wait for deterministic ingestion completion")
     parser.add_argument("--verify", action="store_true", help="verify all deterministic demo evidence")
+    parser.add_argument("--quiet", action="store_true", help="print only a concise success line")
     parser.add_argument("--timeout-seconds", type=int, default=180)
     args = parser.parse_args()
     if not args.wait and not args.verify:
@@ -230,7 +231,10 @@ def main() -> None:
             if args.wait
             else verify_demo(engine)
         )
-        print(json.dumps(result, default=str, indent=2, sort_keys=True))
+        if args.quiet:
+            print("PASS deterministic inventory, telemetry, AFDD, override, and negative cases")
+        else:
+            print(json.dumps(result, default=str, indent=2, sort_keys=True))
     finally:
         engine.dispose()
 

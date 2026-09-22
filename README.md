@@ -23,6 +23,16 @@ seeds a second time to prove idempotency, replays the complete source data, wait
 runs deterministic AFDD evaluation, verifies evidence, and checks the API/web routes. Any failed stage exits
 non-zero. Re-running it produces the same business results; generated UUIDs and receipt timestamps may differ.
 
+Reviewer commands:
+
+```bash
+make demo          # create the complete deterministic demo state
+make verify-demo   # verify the already-running demo without resetting/replaying
+make test          # run backend and frontend deterministic suites
+make reset         # clear/reseed application state while preserving named volumes
+make ai-live-demo  # real provider attempt; requires OPENAI_API_KEY only here
+```
+
 Open:
 
 - Dashboard: <http://localhost:3000/portfolio>
@@ -66,8 +76,10 @@ Key paths are `apps/` (service entry points/web), `src/afdd/` (domain logic), `d
 
 ```bash
 make demo          # deterministic end-to-end reviewer environment
+make verify-demo   # fail-fast health and deterministic output verification
 make reset         # reset/reseed application data; keeps Docker volumes
 make test          # complete backend and frontend tests
+make ai-live-demo  # safe real-model run; never confirms or activates
 make lint          # Ruff, compileall, TS production build, Compose config, diff check
 make demo-reset    # destructive: stop services and remove local demo volumes
 ```
@@ -111,12 +123,15 @@ or activating anything. Bounded tools cannot execute arbitrary SQL/code, create 
 Fake-provider tests cover supported/paraphrased prompts, clarification, injection/unsupported logic, invented
 assets, ontology changes, malformed output/retry, missing provider, and idempotent confirmation.
 
-For a later real-provider review-state run, place a key only in ignored `.env`, set `OPENAI_MODEL`, seed the
-ontology, then run:
+For a later real-provider review-state run, first run `make demo`, then place a key only in ignored `.env`
+and set `OPENAI_MODEL`. Run:
 
 ```bash
-docker compose run --rm api python -m afdd.ai_demo
+make ai-live-demo
 ```
+
+This target verifies the running demo first, invokes the existing authoring orchestration, prints a sanitized
+evidence summary, never confirms or activates, and exits non-zero unless it reaches `READY_FOR_REVIEW`.
 
 A real `openai` request with `gpt-5.6-terra` reached the provider but failed safely with HTTP 429 after two
 calls/one bounded retry (5,408 ms); no confirmation or activation occurred. This is failure-path evidence

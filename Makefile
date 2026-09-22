@@ -1,7 +1,10 @@
-.PHONY: demo reset demo-reset test backend-test frontend-test lint
+.PHONY: demo verify-demo reset demo-reset test backend-test frontend-test lint ai-live-demo
 
 demo:
 	bash scripts/demo.sh
+
+verify-demo:
+	bash scripts/verify-demo.sh
 
 reset:
 	docker compose up -d --wait db
@@ -18,6 +21,9 @@ frontend-test:
 	docker build --target test -f apps/web/Dockerfile .
 
 test: backend-test frontend-test
+
+ai-live-demo: verify-demo
+	docker compose run --build --rm api python -m afdd.ai_demo
 
 lint:
 	docker compose --profile test run --build --rm test ruff check apps src tests db/migrations

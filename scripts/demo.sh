@@ -39,14 +39,8 @@ docker compose run --rm worker python -m apps.worker.main \
 echo "[demo] Starting the independent AFDD worker service"
 docker compose up -d worker
 
-echo "[demo] Verifying inventory, telemetry, issue, override, and non-trigger evidence"
-docker compose exec -T api python -m afdd.demo_check --verify
-
-echo "[demo] Verifying API, OpenAPI, dashboard, and AI authoring routes"
-docker compose exec -T api python -c \
-  "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health'); urllib.request.urlopen('http://127.0.0.1:8000/openapi.json')"
-docker compose exec -T web wget -q -O /dev/null http://127.0.0.1/portfolio
-docker compose exec -T web wget -q -O /dev/null http://127.0.0.1/rules/new/ai
+echo "[demo] Verifying system health and deterministic outputs"
+bash scripts/verify-demo.sh
 
 docker compose ps
 echo "[demo] Ready: dashboard http://localhost:3000/portfolio | API http://localhost:8000/docs"
