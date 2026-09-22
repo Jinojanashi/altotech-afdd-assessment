@@ -8,7 +8,7 @@ multiple buildings, with enough topology and evidence to identify affected tenan
 ## 2. System boundary
 
 The target system replays supplied data, ingests and stores telemetry, models the portfolio relationally,
-evaluates the required AFDD rule, and serves an API/web UI. This initial change creates only that foundation.
+evaluates the required AFDD rule in a separate worker, and exposes rule preview and issue evidence APIs.
 Device connectivity, work orders, notifications, dashboard implementation, AI authoring, and bonus features
 are outside scope.
 
@@ -21,11 +21,11 @@ are outside scope.
 
 ## 4. Proposed telemetry event
 
-The versioned event includes `event_id`, `source_system`, `source_record_id`, `equipment_id`, `observed_at`,
-`received_at`, source file, and point values with source point ID, unit, and quality. A deterministic event
+The versioned event includes `event_id`, `source`, `source_record_id`, `equipment_id`, `equipment_type`,
+`observed_at`, `received_at`, source file, and named measurement values. A deterministic event
 UUID derived from source identity plus a uniqueness constraint provides idempotency; a separate attempt log
 keeps duplicate deliveries visible. Observation time drives history and AFDD, while receipt time shows
-platform latency.
+platform latency. Ingestion resolves canonical point identity, unit, and `GOOD` quality from the registry.
 
 ## 5. Proposed ontology representation
 

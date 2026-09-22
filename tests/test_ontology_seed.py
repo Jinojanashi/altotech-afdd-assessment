@@ -6,7 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
-from apps.api.main import app
 from afdd.ontology import (
     equipment_datapoints,
     equipment_topology,
@@ -15,6 +14,7 @@ from afdd.ontology import (
     relationships_for_entity,
 )
 from afdd.seed import reset_inventory, seed_inventory
+from apps.api.main import app
 
 SOURCE_DIR = Path(os.environ.get("SEED_SOURCE_DIR", "data/candidate-starter-pack/building-and-equipment"))
 

@@ -156,6 +156,8 @@ def reset_inventory(engine: Engine) -> None:
     """Clear canonical inventory and all FK-dependent local data; intended for local development only."""
 
     with engine.begin() as connection:
+        connection.execute(text("TRUNCATE TABLE afdd_rules CASCADE"))
+        connection.execute(text("TRUNCATE TABLE ingestion_events CASCADE"))
         connection.execute(text("TRUNCATE TABLE ontology_entities CASCADE"))
 
 
@@ -163,8 +165,6 @@ def seed_inventory(engine: Engine, source_dir: Path) -> SeedSummary:
     spaces, equipment, points = load_source(source_dir)
     validate_source(spaces, equipment, points)
     spaces_by_id = {row["space_id"]: row for row in spaces}
-    equipment_by_id = {row["equipment_id"]: row for row in equipment}
-
     with engine.begin() as connection:
         for row in spaces:
             context = context_for_space(row["space_id"], spaces_by_id)
@@ -302,4 +302,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

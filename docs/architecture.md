@@ -4,25 +4,23 @@
 
 This repository provides the deployable foundation for replaying the supplied telemetry, ingesting it,
 evaluating the required AHU fault rule, and exposing results through an API and web application. It does
-not yet implement the dashboard, production ingestion/evaluation logic, or AI rule authoring. Source CSVs
-remain immutable inputs.
+not implement the dashboard or AI rule authoring. Source CSVs remain immutable inputs.
 
 ## Components
 
 ```text
 candidate CSVs -> simulator -> telemetry.raw.v1 -> ingestion -> TimescaleDB
-                                      Redpanda          |
-                                                        +-> telemetry.accepted.v1 -> AFDD worker
-                                                                                         |
-web -> FastAPI API ----------------------------------------------------------> PostgreSQL/TimescaleDB
+                                      Redpanda                         |
+                                                                       v
+web -> FastAPI API ------------------------------------------> PostgreSQL <- AFDD worker
 ```
 
 - **Simulator:** converts each source snapshot into a versioned device event. Playback uses source time,
   a configurable output interval, and an acceleration factor.
 - **Ingestion consumer:** validates identity and ontology references, records every event disposition,
   writes history idempotently, and only updates current state when `observed_at` is newer.
-- **AFDD worker:** consumes accepted observations and maintains deterministic per-equipment evaluation
-  state and issue lifecycle.
+- **AFDD worker:** independently polls accepted persisted events and maintains deterministic state per rule
+  version/equipment. A resettable one-shot mode provides reproducible assessment replay.
 - **API/web:** FastAPI is the service boundary; React/TypeScript is currently an application shell.
 - **Storage:** PostgreSQL stores application state and a relational Brick-aligned ontology. TimescaleDB
   hypertables store time-series readings. Neo4j is intentionally not used.
@@ -67,6 +65,9 @@ resets the window. A continuous absolute SAT error over 3°C for 15 minutes open
 issue closes on the first trusted normal observation. A later sustained deviation creates a new occurrence.
 Each issue references the immutable rule version and stores opening evidence. One property-scoped override
 may change threshold or duration without affecting other properties.
+
+Full rule targeting, timing boundaries, late-event behavior, lifecycle, and evidence are documented in
+[`afdd.md`](afdd.md).
 
 ## Main risks
 

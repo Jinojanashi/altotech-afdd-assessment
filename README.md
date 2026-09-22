@@ -89,3 +89,25 @@ docker compose exec db psql -U afdd -d afdd -c "SELECT processing_status, count(
 curl http://localhost:8000/ingestion/status
 curl http://localhost:8000/telemetry/equipment/ahu-a-f01-east/latest
 ```
+
+## AFDD rule evaluation
+
+The supplied SAT-deviation rule is a validated, versioned DSL with ontology-based target preview. Rule
+versions and their property overrides are immutable. The default demonstration scope selects the eight
+office floors in Buildings A and B; Building B has an explicit 2.0°C threshold override while all other
+targets use 3.0°C. See [docs/afdd.md](docs/afdd.md) for exact timing, freshness, recovery, recurrence, and
+evidence semantics.
+
+After telemetry ingestion, create/activate the default rule, clear prior evaluation results, and replay all
+accepted events deterministically:
+
+```bash
+docker compose run --rm worker python -m apps.worker.main \
+  --ensure-default-rule --reset --once
+curl http://localhost:8000/rules
+curl http://localhost:8000/issues
+```
+
+Rule validation and preview are available through `POST /rules/validate` and `POST /rules/preview`. Stored
+versions can be previewed at `GET /rules/{rule_id}/versions/{version}/preview`; evaluation remains in the
+separate worker and is never performed by an API request.
