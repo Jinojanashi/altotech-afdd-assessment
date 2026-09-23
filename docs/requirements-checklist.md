@@ -32,7 +32,7 @@ milestone. `Blocked` is deliberately not presented as complete.
 | Human-only confirmation; no model activation | Covered | confirmation endpoint and state guard | exactly-once/guard tests | AI review button |
 | AI audit trace | Covered | request state/tool/provider metadata | AI tests and persisted 429 evidence | AI docs |
 | Real provider integration/failure path | Covered | OpenAI Responses adapter | real 429: 2 calls, 1 retry, safe `FAILED` | AI docs |
-| Successful real-model review-state run | **Blocked** | command exists; provider quota prevented success | successful live evidence absent | explicit pre-submission blocker |
+| Successful real-model review-state run | Covered | OpenAI Responses adapter | `docs/real-model-evaluation.md`, `docs/real-model-demo.txt` | `READY_FOR_REVIEW`; no confirmation/activation |
 | Docker Compose/migrations/seed/reset/replay | Covered | Compose, Alembic, seed CLI | clean validation required in M7 | README |
 | One-command deterministic demo and checks | **Closed M7** | `Makefile`, demo verifier/script | clean volume run | README/demo guide |
 | OpenAPI verification | **Closed M7** | FastAPI generated schema | live `/docs` and `/openapi.json` check | README |
@@ -47,7 +47,8 @@ The product requirements were implemented, but submission/reviewer requirements 
 no deterministic top-level demo orchestration or completion verifier; README and architecture retained stale
 milestone wording; the demonstration, tradeoff, reviewer-question, screenshot, and final audit documents were
 absent; and OpenAPI plus a genuinely clean application start had not been included in a final validation.
-The successful live-model run remains a required external blocker after the already observed HTTP 429.
+The successful live-model review-state run is covered. The already observed HTTP 429 remains useful
+failure-path evidence only.
 
 Bonus requirements are intentionally absent. No Neo4j/RDF service, telemetry interpolation, speculative
 diagnostics, or additional rule type is introduced by the closeout work.

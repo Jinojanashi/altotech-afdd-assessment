@@ -21,6 +21,7 @@ def interpretation(**changes) -> Interpretation:
         "intent": "Critical SAT deviation for office AHUs in Building A",
         "property_queries": ["Building A"],
         "floor_queries": [],
+        "served_usage_queries": [],
         "equipment_type": "AHU",
         "left_measurement": "SAT",
         "right_measurement": "SAT_SP",
@@ -87,6 +88,56 @@ def test_supported_and_paraphrased_requests_reach_review_without_activation(engi
         assert connection.execute(text("SELECT count(*) FROM afdd_rules")).scalar_one() == 0
 
 
+def test_office_ahus_resolve_property_and_served_usage_without_activation(engine):
+    result = create_authoring_request(
+        engine,
+        (
+            "Create a Critical rule for office AHUs in Building A when supply air temperature "
+            "differs from its setpoint by more than 3°C for 15 minutes while the AHU is running."
+        ),
+        FakeModel(interpretation(served_usage_queries=["office"])),
+    )
+
+    assert result["state"] == "READY_FOR_REVIEW"
+    assert result["interpreted_intent"]["property_queries"] == ["Building A"]
+    assert result["interpreted_intent"]["served_usage_queries"] == ["office"]
+    assert result["reviewed_draft"]["scope"]["property_ids"] == ["building-a"]
+    assert result["reviewed_draft"]["scope"]["served_zone_usage_types"] == ["Tenant Area"]
+    assert result["target_preview"]["matched_count"] > 0
+    assert result["human_confirmed_at"] is None
+    assert result["activation_result"] is None
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM afdd_rules")).scalar_one() == 0
+
+
+def test_misclassified_served_usage_is_reclassified_and_audited(engine):
+    result = create_authoring_request(
+        engine,
+        "Create a Critical rule for office AHUs in Building A",
+        FakeModel(interpretation(property_queries=["Building A", "office"])),
+    )
+
+    assert result["state"] == "READY_FOR_REVIEW"
+    assert result["reviewed_draft"]["scope"]["property_ids"] == ["building-a"]
+    assert result["reviewed_draft"]["scope"]["served_zone_usage_types"] == ["Tenant Area"]
+    assert result["target_preview"]["matched_count"] > 0
+    assert result["human_confirmed_at"] is None
+    assert result["activation_result"] is None
+    normalization = next(
+        tool for tool in result["tool_trace"]
+        if tool["tool"] == "normalize_scope_references"
+    )
+    assert normalization["result"]["normalization_events"] == [{
+        "event": "scope_reference_reclassified",
+        "query": "office",
+        "from": "property",
+        "to": "served_usage",
+    }]
+    assert any("scope_reference_reclassified" in warning for warning in result["warnings"])
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM afdd_rules")).scalar_one() == 0
+
+
 def test_ambiguous_request_clarifies_and_resumes_same_request(engine):
     ambiguous = interpretation(
         outcome="NEEDS_CLARIFICATION", property_queries=[], threshold=None,
@@ -119,6 +170,41 @@ def test_no_match_and_invented_assets_are_rejected_by_current_ontology(engine, a
     assert result["state"] == "REJECTED"
     assert "Unresolved ontology reference" in result["stop_reason"]
     assert result["activation_result"] is None
+
+
+def test_invented_served_usage_is_rejected_by_current_ontology(engine):
+    result = create_authoring_request(
+        engine,
+        "Create a rule for laboratory AHUs in Building A",
+        FakeModel(interpretation(served_usage_queries=["invented laboratory usage"])),
+    )
+    assert result["state"] == "REJECTED"
+    assert "Unresolved ontology reference: invented laboratory usage" in result["stop_reason"]
+    assert result["activation_result"] is None
+
+
+def test_cross_dimension_match_requires_clarification(engine):
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE ontology_entities SET name='Tenant Area' WHERE source_id='building-b'")
+        )
+    try:
+        result = create_authoring_request(
+            engine,
+            "Create a rule for Building A and the Tenant Area scope",
+            FakeModel(interpretation(property_queries=["Building A", "Tenant Area"])),
+        )
+        assert result["state"] == "NEEDS_CLARIFICATION"
+        assert "property, served_usage" in result["clarification_question"]
+        assert result["human_confirmed_at"] is None
+        assert result["activation_result"] is None
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT count(*) FROM afdd_rules")).scalar_one() == 0
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE ontology_entities SET name='Building B' WHERE source_id='building-b'")
+            )
 
 
 def test_model_asset_ids_and_changed_ontology_are_server_verified(engine):

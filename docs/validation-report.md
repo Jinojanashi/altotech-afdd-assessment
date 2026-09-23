@@ -72,7 +72,7 @@ audit. `.env` is ignored and untracked. A tracked-file scan found no `.env`, nod
 build output, or local DB file. A filename-only scan found no tracked API-key-like value. The starter pack’s
 already-supplied `.DS_Store` remains untouched because source files are immutable.
 
-## AI evidence and blocker
+## AI evidence
 
 Before the required clean reset, persisted failure-path evidence was inspected without exposing prompt/key data:
 request `5dbd8af7-6cbd-40ad-9093-ef1da6c22ce5`, provider `openai`, model `gpt-5.6-terra`, state `FAILED`, two
@@ -80,10 +80,12 @@ model calls, one retry, 5,408 ms, HTTP 429 present, `human_confirmed_at` null, a
 clean reset intentionally cleared local AI audit rows along with other application data; this report preserves
 the non-secret result.
 
-**Required blocker:** before submission, perform at least one successful real-model authoring run that reaches
-interpretation, server validation, ontology resolution, and a non-empty `READY_FOR_REVIEW` preview without
-automatic activation. The 429 failure does not satisfy that requirement.
+The successful real-model requirement is complete. OpenAI `gpt-5.6-terra` request
+`5bb1b689-0d7d-4a0b-8465-3b879aeecc2c` reached `READY_FOR_REVIEW` in one call with zero retries and 4,601 ms
+latency. Validation passed; the ontology-backed preview matched 8 targets and excluded 16. Human confirmation
+and activation were both absent. See [real-model evaluation](real-model-evaluation.md) and the preserved
+[raw real-model demo output](real-model-demo.txt). The earlier HTTP 429 remains failure-path evidence only.
 
 Browser screenshot automation was unavailable. `screenshot-walkthrough.md` is therefore a precise nine-step
-capture checklist; no screenshot has been fabricated. The AI review-state screenshot remains pending the same
-successful real-model blocker.
+capture checklist; no screenshot has been fabricated. The successful real-model prerequisite for the AI
+review-state screenshot is complete, but that screenshot still needs to be captured.

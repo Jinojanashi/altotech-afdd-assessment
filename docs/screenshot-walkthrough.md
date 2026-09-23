@@ -10,9 +10,9 @@ units, and state labels visible; do not include `.env`, terminals containing sec
 5. `05-topology-separation.png` — `building-a-plant-room` under Installed at, served zone, and the two affected occupied rooms side by side.
 6. `06-rule-preview.png` — rule version configuration, matched targets, and at least one exclusion reason.
 7. `07-building-b-override.png` — Building B’s effective 2.0°C local override in rule preview.
-8. `08-ai-review-before-confirm.png` — `READY_FOR_REVIEW`, interpreted draft, non-empty target preview, and enabled confirmation button before it is clicked. Capture only after a successful configured provider run.
+8. `08-ai-review-before-confirm.png` — `READY_FOR_REVIEW`, interpreted draft, non-empty target preview, and enabled confirmation button before it is clicked. The successful real-model prerequisite is complete; capture this screen before confirmation.
 9. `09-ingestion-exceptions.png` — `/ingestion/status` and `/ingestion/events` showing one duplicate and one rejected unknown device (two browser panes are acceptable).
 
 Screenshots 2–5 form a sequenced investigation: symptom, measured trigger, lifecycle, then physical versus
-affected topology. Screenshot 8 is pending the required successful real-model run; a provider `FAILED` screen
-must not be substituted or labeled as successful review evidence.
+affected topology. The successful real-model prerequisite for screenshot 8 is complete, but the screenshot itself
+still needs to be captured; a provider `FAILED` screen must not be substituted or labeled as successful review evidence.

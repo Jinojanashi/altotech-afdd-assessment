@@ -21,7 +21,9 @@ Concrete corrections from review:
   implementation resolves every property/floor reference against the live server ontology before validation,
   preview, and again at confirmation.
 
-The real provider test used `openai/gpt-5.6-terra`. It made two calls with one bounded retry and safely ended
-`FAILED` after HTTP 429 in about 5,408 ms. `human_confirmed_at` and `activation_result` remained null. This is
-honestly recorded as failure-path evidence, not successful model evaluation; one successful real run reaching
-`READY_FOR_REVIEW` without activation remains required before submission.
+Real provider validation covered both outcomes with `openai/gpt-5.6-terra`. The failure path made two calls with
+one bounded retry and safely ended `FAILED` after HTTP 429 in about 5,408 ms; `human_confirmed_at` and
+`activation_result` remained null. A later successful run reached `READY_FOR_REVIEW` in one call: validation
+passed, the ontology-backed preview matched 8 targets and excluded 16, and no confirmation or activation occurred.
+The HTTP 429 is additional failure-path evidence, not a submission blocker. See
+[real-model evaluation](real-model-evaluation.md).

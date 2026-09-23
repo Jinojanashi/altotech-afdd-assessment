@@ -52,8 +52,9 @@
     `REJECTED`; it never silently converts the invented asset into a target.
 25. **Ontology changes after interpretation?** Confirmation re-resolves/revalidates the stored draft against the
     current ontology. Drift that removes valid scope/targets prevents activation.
-26. **Provider failure?** At most two calls occur. The request becomes auditable `FAILED` with latency/retry/stop
-    reason and no confirmation/activation. The real 429 run proves this path.
+26. **Provider outcomes?** At most two calls occur. One real HTTP 429 request became auditable `FAILED` with
+    latency/retry/stop reason and no confirmation/activation. A separate real OpenAI `gpt-5.6-terra` response
+    reached `READY_FOR_REVIEW` after validation and target preview, also with no confirmation or activation.
 27. **What changes at production scale?** Replicated brokers/database, schema registry, RBAC/secrets manager,
     telemetry retention/compression, batch/partitioned ingestion, checkpointed streaming evaluation, materialized
     dashboard projections, metrics/tracing/alerts, clock-quality rules, and governed multi-user approvals.

@@ -1,0 +1,42 @@
+docker compose run --rm api python -m afdd.ai_demo
+{
+  "activation_result": null,
+  "human_confirmed_at": null,
+  "interpreted_intent": {
+    "clarification_question": null,
+    "duration_seconds": 900,
+    "equipment_type": "AHU",
+    "floor_queries": [],
+    "intent": "Create a Critical AFDD issue rule for office AHUs in Building A when the absolute deviation between supply-air temperature and supply-air-temperature setpoint exceeds 3 \u00b0C continuously for 15 minutes while the AHU is running.",
+    "left_measurement": "SAT",
+    "operator": ">",
+    "outcome": "SUPPORTED",
+    "property_queries": [
+      "Building A",
+      "office"
+    ],
+    "rejection_reason": null,
+    "right_measurement": "SAT_SP",
+    "run_equals": "ON",
+    "run_point": "RUN",
+    "severity": "Critical",
+    "threshold": 3.0,
+    "unit": "degC"
+  },
+  "latency_ms": 2666,
+  "model": "gpt-5.6-terra",
+  "model_calls": 1,
+  "preview_summary": null,
+  "provider": "openai",
+  "request_id": "a5bb491c-14c6-4907-a1d4-8421579e4e09",
+  "retry_count": 0,
+  "state": "REJECTED",
+  "stop_reason": "Unresolved ontology reference: office",
+  "validation_result": null,
+  "workflow_states": [
+    "RECEIVED",
+    "INTERPRETING",
+    "DISCOVERING",
+    "REJECTED"
+  ]
+}

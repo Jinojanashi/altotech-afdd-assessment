@@ -31,13 +31,13 @@ Automated tests use deterministic fake clients and never require a network or AP
 make ai-live-demo
 ```
 
-The target first runs `make verify-demo`, prints only sanitized workflow evidence, never calls confirmation,
-and exits non-zero unless the supported request reaches `READY_FOR_REVIEW`.
+The target prints only sanitized workflow evidence, never calls confirmation, and exits non-zero unless the
+supported request reaches `READY_FOR_REVIEW`.
 
-The recorded real `openai/gpt-5.6-terra` attempt reached the provider, made two calls with one bounded retry,
-and ended `FAILED` after HTTP 429 in approximately 5,408 ms. The persisted record had no human confirmation or
-activation result. This validates the provider failure path only. A successful real run reaching
-`READY_FOR_REVIEW` with a non-empty preview and no activation is still required before submission.
+A successful real `openai/gpt-5.6-terra` request reached `READY_FOR_REVIEW` with validation passed, 8 matched
+targets, 16 exclusions, no human confirmation, and no activation. Separately, a provider request made two calls
+with one bounded retry and ended `FAILED` after HTTP 429 in approximately 5,408 ms; its persisted record also had
+no confirmation or activation. Both paths are documented in [real-model evaluation](real-model-evaluation.md).
 
 ## AI-assistance disclosure
 

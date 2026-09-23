@@ -61,15 +61,15 @@ Open <http://localhost:3000/rules/new/ai>. The page loads without a key. A suppo
 
 > Create a Critical rule for office AHUs in Building A when SAT differs from SAT setpoint by more than 3°C for 15 minutes while running.
 
-With a working configured provider, show persisted workflow stages, server-resolved scope, draft, warnings,
-matches/exclusions, and audit trace in `READY_FOR_REVIEW`. The rule remains inactive until **Confirm and
-activate rule** is clicked; the model itself has no activation tool. Do not confirm during evidence capture.
+The successful configured-provider run reached `READY_FOR_REVIEW` after interpretation, server-resolved scope,
+validation, and a non-empty target preview. It matched 8 targets and excluded 16. The rule remained inactive:
+no confirmation or activation occurred. When demonstrating it in the UI, do not click **Confirm and activate rule**.
 
 Without `OPENAI_API_KEY`, submission stops safely in `FAILED` and records the reason. Deterministic fake-model
-coverage is run by `make test`. To attempt the real provider later, put the key only in ignored `.env`, choose
-`OPENAI_MODEL`, and run `make ai-live-demo` after `make demo`. The recorded real
-`gpt-5.6-terra` attempt reached OpenAI but ended in HTTP 429 after one retry; that proves only the failure path.
-A successful real run reaching `READY_FOR_REVIEW` without confirmation is still required before submission.
+coverage is run by `make test`. To rerun the real provider, put the key only in ignored `.env`, choose
+`OPENAI_MODEL`, and run `make ai-live-demo` after `make demo`. A separate real `gpt-5.6-terra` request returned
+HTTP 429 after one bounded retry; that is additional failure-path evidence, while the successful review-state run
+is recorded in [real-model evaluation](real-model-evaluation.md).
 
 ## 7. API inspection
 

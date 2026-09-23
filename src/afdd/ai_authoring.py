@@ -4,11 +4,12 @@ import json
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -22,13 +23,13 @@ from afdd.rules import (
     validate_references,
 )
 
-PROMPT_VERSION = "afdd-authoring-v1"
-SCHEMA_VERSION = "interpretation-v1"
+PROMPT_VERSION = "afdd-authoring-v2"
+SCHEMA_VERSION = "interpretation-v2"
 MAX_MODEL_ATTEMPTS = 2
 ALLOWED_TRANSITIONS = {
     "RECEIVED": {"INTERPRETING", "FAILED", "STOPPED"},
     "INTERPRETING": {"DISCOVERING", "NEEDS_CLARIFICATION", "REJECTED", "FAILED", "STOPPED"},
-    "DISCOVERING": {"VALIDATING", "REJECTED", "FAILED", "STOPPED"},
+    "DISCOVERING": {"VALIDATING", "NEEDS_CLARIFICATION", "REJECTED", "FAILED", "STOPPED"},
     "VALIDATING": {"PREVIEWING", "REJECTED", "FAILED", "STOPPED"},
     "PREVIEWING": {"READY_FOR_REVIEW", "REJECTED", "FAILED", "STOPPED"},
     "NEEDS_CLARIFICATION": {"RECEIVED", "STOPPED"},
@@ -43,8 +44,13 @@ class Interpretation(BaseModel):
     model_config = ConfigDict(extra="forbid")
     outcome: Literal["SUPPORTED", "NEEDS_CLARIFICATION", "REJECTED"]
     intent: str
-    property_queries: list[str]
-    floor_queries: list[str]
+    property_queries: list[str] = Field(
+        description="Property or building references only; never space-usage concepts."
+    )
+    floor_queries: list[str] = Field(description="Floor references only.")
+    served_usage_queries: list[str] = Field(
+        description="Usage concepts for spaces served by the equipment, such as office or guest."
+    )
     equipment_type: Literal["AHU"]
     left_measurement: str | None
     right_measurement: str | None
@@ -79,7 +85,11 @@ class OpenAIResponsesClient:
         system = (
             "Interpret an AFDD rule request. Never activate, control equipment, invent assets, or "
             "silently simplify unsupported logic. Only SAT absolute deviation from SAT_SP while RUN=ON "
-            "is supported. Missing threshold or duration requires clarification. Return the schema only."
+            "is supported. Missing threshold or duration requires clarification. Put only property or "
+            "building references in property_queries, only floors in floor_queries, and served-space "
+            "usage concepts in served_usage_queries. For example, 'office AHUs in Building A' means "
+            "property_queries=['Building A'] and served_usage_queries=['office']. Do not return canonical "
+            "ontology IDs; the server resolves all references authoritatively. Return the schema only."
         )
         payload = {
             "model": self.model,
@@ -133,14 +143,33 @@ def search_ontology(engine: Engine) -> dict[str, Any]:
     with engine.connect() as connection:
         rows = connection.execute(text("""
             SELECT entity.source_id, entity.name AS display_name, space.space_type,
-                   space.usage_type, parent.source_id AS parent_id
+                   space.usage_type, space.property_type, parent.source_id AS parent_id
             FROM ontology_entities entity JOIN spaces space ON space.entity_id=entity.id
             LEFT JOIN ontology_relationships rel
               ON rel.subject_id=entity.id AND rel.predicate='isPartOf'
             LEFT JOIN ontology_entities parent ON parent.id=rel.object_id
             WHERE space.space_type IN ('Building','Floor') ORDER BY entity.source_id
         """)).mappings()
-        return {"spaces": [dict(row) for row in rows], "equipment_types": ["AHU"]}
+        served_usage_rows = connection.execute(text("""
+            SELECT DISTINCT zone_space.usage_type,
+                   building_entity.source_id AS property_id,
+                   building_space.usage_type AS property_usage_type
+            FROM spaces zone_space
+            JOIN ontology_entities zone_entity ON zone_entity.id=zone_space.entity_id
+            JOIN ontology_relationships zone_floor
+              ON zone_floor.subject_id=zone_entity.id AND zone_floor.predicate='isPartOf'
+            JOIN ontology_relationships floor_building
+              ON floor_building.subject_id=zone_floor.object_id AND floor_building.predicate='isPartOf'
+            JOIN ontology_entities building_entity ON building_entity.id=floor_building.object_id
+            JOIN spaces building_space ON building_space.entity_id=building_entity.id
+            WHERE zone_space.space_type='HVAC Zone' AND zone_space.usage_type IS NOT NULL
+            ORDER BY building_entity.source_id, zone_space.usage_type
+        """)).mappings()
+        return {
+            "spaces": [dict(row) for row in rows],
+            "served_usages": [dict(row) for row in served_usage_rows],
+            "equipment_types": ["AHU"],
+        }
 
 
 def _jsonable(record: dict[str, Any]) -> dict[str, Any]:
@@ -201,30 +230,124 @@ def _record_tool(trace: list[dict[str, Any]], name: str, arguments: Any, result:
     trace.append({"tool": name, "arguments": arguments, "result": result})
 
 
-def _resolve_scope(discovery: dict[str, Any], interpretation: Interpretation) -> tuple[list[str], list[str], list[str]]:
+@dataclass(frozen=True)
+class ScopeResolution:
+    property_ids: list[str]
+    floor_ids: list[str]
+    served_usages: list[str]
+    warnings: list[str]
+    normalization_events: list[dict[str, str]]
+    unresolved_queries: list[str]
+    ambiguous_queries: list[dict[str, Any]]
+
+
+def _resolve_scope(
+    discovery: dict[str, Any], interpretation: Interpretation
+) -> ScopeResolution:
     spaces = discovery["spaces"]
     buildings = [item for item in spaces if item["space_type"] == "Building"]
     floors = [item for item in spaces if item["space_type"] == "Floor"]
-    resolved_properties: list[str] = []
+    references = [
+        *(("property", query) for query in interpretation.property_queries),
+        *(("floor", query) for query in interpretation.floor_queries),
+        *(("served_usage", query) for query in interpretation.served_usage_queries),
+    ]
+
+    def property_matches(query: str) -> set[str]:
+        folded = query.casefold()
+        return {
+            item["source_id"]
+            for item in buildings
+            if folded in {item["source_id"].casefold(), item["display_name"].casefold()}
+        }
+
+    # Establish property context first so duplicate floor labels and usage aliases
+    # are evaluated only against the selected canonical properties.
+    resolved_properties = {
+        next(iter(matches))
+        for _, query in references
+        if len(matches := property_matches(query)) == 1
+    }
+
+    def dimension_matches(query: str) -> dict[str, set[str]]:
+        folded = query.casefold()
+        matched_floors = {
+            item["source_id"]
+            for item in floors
+            if folded in {item["source_id"].casefold(), item["display_name"].casefold()}
+            and (not resolved_properties or item["parent_id"] in resolved_properties)
+        }
+        served_catalog = discovery["served_usages"]
+        direct_usages = {
+            item["usage_type"]
+            for item in served_catalog
+            if folded == item["usage_type"].casefold()
+        }
+        contextual_usages = {
+            item["usage_type"]
+            for item in served_catalog
+            if item["property_usage_type"]
+            and folded == item["property_usage_type"].casefold()
+        }
+        candidates = {
+            "property": property_matches(query),
+            "floor": matched_floors,
+            "served_usage": direct_usages or contextual_usages,
+        }
+        return {dimension: values for dimension, values in candidates.items() if values}
+
+    resolved_by_dimension: dict[str, list[str]] = {
+        "property": [],
+        "floor": [],
+        "served_usage": [],
+    }
+    normalization_events: list[dict[str, str]] = []
     unresolved: list[str] = []
-    for query in interpretation.property_queries:
-        matches = [item for item in buildings if query.casefold() in {item["source_id"].casefold(), item["display_name"].casefold()}]
-        if len(matches) == 1:
-            resolved_properties.append(matches[0]["source_id"])
-        else:
+    ambiguous: list[dict[str, Any]] = []
+    for source_dimension, query in references:
+        matches = dimension_matches(query)
+        if not matches:
             unresolved.append(query)
-    resolved_floors: list[str] = []
-    for query in interpretation.floor_queries:
-        matches = [item for item in floors if query.casefold() in {item["source_id"].casefold(), item["display_name"].casefold()} and item["parent_id"] in resolved_properties]
-        if len(matches) == 1:
-            resolved_floors.append(matches[0]["source_id"])
-        else:
-            unresolved.append(query)
+            continue
+        if len(matches) != 1 or len(next(iter(matches.values()))) != 1:
+            ambiguous.append({
+                "query": query,
+                "from": source_dimension,
+                "matching_dimensions": sorted(matches),
+            })
+            continue
+        target_dimension, values = next(iter(matches.items()))
+        resolved_by_dimension[target_dimension].extend(values)
+        if target_dimension != source_dimension:
+            normalization_events.append({
+                "event": "scope_reference_reclassified",
+                "query": query,
+                "from": source_dimension,
+                "to": target_dimension,
+            })
+
+    resolved_properties = set(resolved_by_dimension["property"])
+    resolved_floors = set(resolved_by_dimension["floor"])
     warnings: list[str] = []
-    if resolved_properties and not interpretation.floor_queries:
-        resolved_floors = [item["source_id"] for item in floors if item["parent_id"] in resolved_properties]
+    if resolved_properties and not resolved_floors and not interpretation.floor_queries:
+        resolved_floors = {
+            item["source_id"] for item in floors if item["parent_id"] in resolved_properties
+        }
         warnings.append("No floors specified; review includes all canonical floors in the selected properties.")
-    return sorted(set(resolved_properties)), sorted(set(resolved_floors)), warnings + [f"Unresolved ontology reference: {item}" for item in unresolved]
+    warnings.extend(
+        f"scope_reference_reclassified: query={event['query']!r} "
+        f"from={event['from']} to={event['to']}"
+        for event in normalization_events
+    )
+    return ScopeResolution(
+        property_ids=sorted(resolved_properties),
+        floor_ids=sorted(resolved_floors),
+        served_usages=sorted(set(resolved_by_dimension["served_usage"])),
+        warnings=warnings,
+        normalization_events=normalization_events,
+        unresolved_queries=unresolved,
+        ambiguous_queries=ambiguous,
+    )
 
 
 def _process(engine: Engine, request_id: str, client: ModelClient, prompt: str) -> dict[str, Any]:
@@ -256,7 +379,6 @@ def _process(engine: Engine, request_id: str, client: ModelClient, prompt: str) 
                     stop_reason=interpretation.rejection_reason or "Unsupported request")
         return get_request(engine, request_id)
     missing = []
-    if not interpretation.property_queries: missing.append("building/property")
     if interpretation.threshold is None: missing.append("threshold")
     if interpretation.duration_seconds is None: missing.append("duration")
     if interpretation.outcome == "NEEDS_CLARIFICATION" or missing:
@@ -275,22 +397,69 @@ def _process(engine: Engine, request_id: str, client: ModelClient, prompt: str) 
     _transition(engine, request_id, "DISCOVERING", **common)
     discovery = search_ontology(engine)
     _record_tool(trace, "search_ontology", {"properties": interpretation.property_queries,
-                 "floors": interpretation.floor_queries}, discovery)
-    properties, floors, warnings = _resolve_scope(discovery, interpretation)
-    unresolved = [warning for warning in warnings if warning.startswith("Unresolved")]
-    if unresolved or not properties or not floors:
-        _transition(engine, request_id, "REJECTED", tool_trace=trace, warnings=warnings,
-                    stop_reason="; ".join(unresolved) or "Scope resolved to no canonical targets")
+                 "floors": interpretation.floor_queries,
+                 "served_usages": interpretation.served_usage_queries}, discovery)
+    resolution = _resolve_scope(discovery, interpretation)
+    _record_tool(trace, "normalize_scope_references", {
+        "property_queries": interpretation.property_queries,
+        "floor_queries": interpretation.floor_queries,
+        "served_usage_queries": interpretation.served_usage_queries,
+    }, {
+        "normalization_events": resolution.normalization_events,
+        "unresolved_queries": resolution.unresolved_queries,
+        "ambiguous_queries": resolution.ambiguous_queries,
+    })
+    if resolution.ambiguous_queries:
+        ambiguous_labels = ", ".join(
+            f"{item['query']!r} ({', '.join(item['matching_dimensions'])})"
+            for item in resolution.ambiguous_queries
+        )
+        _transition(
+            engine,
+            request_id,
+            "NEEDS_CLARIFICATION",
+            tool_trace=trace,
+            warnings=resolution.warnings,
+            clarification_question=(
+                "Please clarify the intended scope dimension for: " + ambiguous_labels
+            ),
+        )
         return get_request(engine, request_id)
+    if resolution.unresolved_queries:
+        unresolved = [
+            f"Unresolved ontology reference: {query}"
+            for query in resolution.unresolved_queries
+        ]
+        _transition(engine, request_id, "REJECTED", tool_trace=trace,
+                    warnings=resolution.warnings + unresolved,
+                    stop_reason="; ".join(unresolved))
+        return get_request(engine, request_id)
+    if not resolution.property_ids:
+        _transition(engine, request_id, "NEEDS_CLARIFICATION", tool_trace=trace,
+                    warnings=resolution.warnings,
+                    clarification_question="Please specify a building/property for the rule scope.")
+        return get_request(engine, request_id)
+    if not resolution.floor_ids:
+        _transition(engine, request_id, "REJECTED", tool_trace=trace,
+                    warnings=resolution.warnings,
+                    stop_reason="Scope resolved to no canonical targets")
+        return get_request(engine, request_id)
+    scope_values: dict[str, Any] = {
+        "property_ids": resolution.property_ids,
+        "floor_ids": resolution.floor_ids,
+    }
+    if resolution.served_usages:
+        scope_values["served_zone_usage_types"] = resolution.served_usages
     draft = RuleDraft(
         rule_key=f"ai-sat-deviation-{request_id[:8]}",
-        display_name=f"AI-assisted SAT deviation — {', '.join(properties)}",
+        display_name=f"AI-assisted SAT deviation — {', '.join(resolution.property_ids)}",
         severity=interpretation.severity or "Critical",
-        scope=TargetScope(property_ids=properties, floor_ids=floors),
+        scope=TargetScope(**scope_values),
         logic=FaultLogic(threshold=interpretation.threshold, duration_seconds=interpretation.duration_seconds),
     )
     draft_json = draft.model_dump(mode="json")
-    _transition(engine, request_id, "VALIDATING", structured_draft=draft_json, tool_trace=trace, warnings=warnings)
+    _transition(engine, request_id, "VALIDATING", structured_draft=draft_json,
+                tool_trace=trace, warnings=resolution.warnings)
     errors = validate_references(engine, draft)
     validation = {"valid": not errors, "errors": errors}
     _record_tool(trace, "validate_rule_draft", draft_json, validation)

@@ -30,7 +30,7 @@ make demo          # create the complete deterministic demo state
 make verify-demo   # verify the already-running demo without resetting/replaying
 make test          # run backend and frontend deterministic suites
 make reset         # clear/reseed application state while preserving named volumes
-make ai-live-demo  # real provider attempt; requires OPENAI_API_KEY only here
+make ai-live-demo  # real provider demo; requires OPENAI_API_KEY only here
 ```
 
 Open:
@@ -152,26 +152,26 @@ or activating anything. Bounded tools cannot execute arbitrary SQL/code, create 
 Fake-provider tests cover supported/paraphrased prompts, clarification, injection/unsupported logic, invented
 assets, ontology changes, malformed output/retry, missing provider, and idempotent confirmation.
 
-For a later real-provider review-state run, first run `make demo`, then place a key only in ignored `.env`
+For a real-provider review-state run, first run `make demo`, then place a key only in ignored `.env`
 and set `OPENAI_MODEL`. Run:
 
 ```bash
 make ai-live-demo
 ```
 
-This target verifies the running demo first, invokes the existing authoring orchestration, prints a sanitized
-evidence summary, never confirms or activates, and exits non-zero unless it reaches `READY_FOR_REVIEW`.
+This target invokes the existing authoring orchestration, prints a sanitized evidence summary, never confirms or
+activates, and exits non-zero unless it reaches `READY_FOR_REVIEW`.
 
-A real `openai` request with `gpt-5.6-terra` reached the provider but failed safely with HTTP 429 after two
-calls/one bounded retry (5,408 ms); no confirmation or activation occurred. This is failure-path evidence
-only. **Required before submission:** complete one successful real-model run through interpretation, server
-validation, ontology resolution, and non-empty preview to `READY_FOR_REVIEW`, without activation.
+A successful OpenAI `gpt-5.6-terra` run reached `READY_FOR_REVIEW`: validation passed, the ontology-backed
+preview matched 8 targets and excluded 16, and no human confirmation or activation occurred. The earlier HTTP
+429 result (two calls/one bounded retry; 5,408 ms) remains additional failure-path evidence only.
+
+See [real-model evaluation](docs/real-model-evaluation.md) and the preserved [raw real-model demo output](docs/real-model-demo.txt).
 
 See [AI authoring](docs/ai-authoring.md) and [AI-assistance disclosure](docs/ai-assistance.md).
 
 ## Known limitations
 
-- The successful real-model evidence above remains a required blocker until provider capacity/quota permits.
 - The demo uses one broker node and synchronous database-backed evaluation; production would add HA,
   observability, secret management, retention policies, and horizontally partitioned workers.
 - Screenshots are supplied as an exact capture checklist because browser capture was unavailable in this

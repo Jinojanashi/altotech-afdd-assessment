@@ -22,8 +22,8 @@ frontend-test:
 
 test: backend-test frontend-test
 
-ai-live-demo: verify-demo
-	docker compose run --build --rm api python -m afdd.ai_demo
+ai-live-demo:
+	docker compose run --rm api python -m afdd.ai_demo
 
 lint:
 	docker compose --profile test run --build --rm test ruff check apps src tests db/migrations

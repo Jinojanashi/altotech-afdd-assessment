@@ -1,0 +1,59 @@
+docker compose run --rm api python -m afdd.ai_demo
+{
+  "activation_result": null,
+  "human_confirmed_at": null,
+  "interpreted_intent": {
+    "clarification_question": null,
+    "duration_seconds": 900,
+    "equipment_type": "AHU",
+    "floor_queries": [],
+    "intent": "Create a Critical AFDD issue rule for office AHUs in Building A when the absolute deviation between supply air temperature and supply-air-temperature setpoint exceeds 3 \u00b0C continuously for 15 minutes while the AHU is running.",
+    "left_measurement": "SAT",
+    "operator": ">",
+    "outcome": "SUPPORTED",
+    "property_queries": [
+      "Building A"
+    ],
+    "rejection_reason": null,
+    "right_measurement": "SAT_SP",
+    "run_equals": "ON",
+    "run_point": "RUN",
+    "severity": "Critical",
+    "threshold": 3.0,
+    "unit": "degC"
+  },
+  "latency_ms": 3567,
+  "model": "gpt-5.6-terra",
+  "model_calls": 1,
+  "preview_summary": {
+    "excluded_count": 16,
+    "matched_count": 8,
+    "matched_equipment_ids": [
+      "ahu-a-f01-east",
+      "ahu-a-f01-west",
+      "ahu-a-f02-east",
+      "ahu-a-f02-west",
+      "ahu-a-f03-east",
+      "ahu-a-f03-west",
+      "ahu-a-f04-east",
+      "ahu-a-f04-west"
+    ]
+  },
+  "provider": "openai",
+  "request_id": "6f9f888d-eb35-4c59-b841-146d992f4cec",
+  "retry_count": 0,
+  "state": "READY_FOR_REVIEW",
+  "stop_reason": null,
+  "validation_result": {
+    "errors": [],
+    "valid": true
+  },
+  "workflow_states": [
+    "RECEIVED",
+    "INTERPRETING",
+    "DISCOVERING",
+    "VALIDATING",
+    "PREVIEWING",
+    "READY_FOR_REVIEW"
+  ]
+}
