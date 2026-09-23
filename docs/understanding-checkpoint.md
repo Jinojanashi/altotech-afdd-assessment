@@ -10,7 +10,8 @@ multiple buildings, with enough topology and evidence to identify affected tenan
 The implemented system replays supplied data, ingests and stores telemetry, models the portfolio relationally,
 evaluates the required AFDD rule in a separate worker, and exposes APIs plus an operations dashboard. AI
 assistance is limited to a human-gated draft workflow over the same rule DSL. Live device connectivity, work
-orders, notifications, autonomous control, and bonus features are outside scope.
+orders, notifications, and autonomous control are outside scope. Historical backtesting and the read-only MCP
+interface are optional, isolated bonus surfaces.
 
 ## 3. Domain interpretation
 

@@ -22,7 +22,7 @@ make demo
   `src-ahu-0100-001` is the duplicate. The verifier was corrected to assert retained late history and latest
   non-regression separately; no product data/logic was forced to fit the check.
 - Subsequent `make demo` runs: passed end to end, including service/API/web/AI-route readiness.
-- `make test`: backend 34 passed with two upstream Starlette/AnyIO deprecation warnings; frontend 5 passed.
+- `make test`: backend 42 passed with two upstream FastAPI/Starlette deprecation warnings; frontend 5 passed.
 - `make lint`: Ruff passed, Python compileall passed, TypeScript typecheck plus Vite production build passed,
   `docker compose config --quiet` passed, and `git diff --check` passed. No frontend lint script is configured.
 
@@ -83,9 +83,42 @@ the non-secret result.
 The successful real-model requirement is complete. OpenAI `gpt-5.6-terra` request
 `5bb1b689-0d7d-4a0b-8465-3b879aeecc2c` reached `READY_FOR_REVIEW` in one call with zero retries and 4,601 ms
 latency. Validation passed; the ontology-backed preview matched 8 targets and excluded 16. Human confirmation
-and activation were both absent. See [real-model evaluation](real-model-evaluation.md) and the preserved
-[raw real-model demo output](real-model-demo.txt). The earlier HTTP 429 remains failure-path evidence only.
+and activation were both absent. Additional sanitized provider outputs are preserved under
+[`evidence/`](evidence/). The earlier HTTP 429 remains failure-path evidence only.
 
-Browser screenshot automation was unavailable. `screenshot-walkthrough.md` is therefore a precise nine-step
-capture checklist; no screenshot has been fabricated. The successful real-model prerequisite for the AI
-review-state screenshot is complete, but that screenshot still needs to be captured.
+## Optional bonus validation
+
+- Historical backtest tests prove deterministic repeated results and unchanged issue, rule activation,
+  evaluator-state, telemetry, and latest-value counts. The default hero case and Building B 3.0°C versus 2.0°C
+  what-if behavior match live semantics.
+- MCP tests cover all four read-only tools plus an explicit mutation-surface audit. The stdio service is optional
+  and absent from the normal demo profile.
+- Seven captured reviewer screenshots are indexed in [`screenshots/README.md`](screenshots/README.md), including
+  the real-model `READY_FOR_REVIEW` state before confirmation.
+
+## Requirement coverage
+
+| Area | Status | Primary implementation/evidence |
+|---|---|---|
+| Simulator and Kafka-compatible event boundary | Covered | separate simulator, Redpanda topic, replay tests |
+| Ingestion, idempotency, late data, and quality visibility | Covered | telemetry pipeline tests and deterministic counts |
+| Canonical relational ontology and explicit topology | Covered | migrations/seed suite and equipment context APIs |
+| TimescaleDB history and latest-state non-regression | Covered | history/current tests and demo verification |
+| Versioned AFDD rule, preview, exclusions, and override | Covered | rule/evaluator suite and dashboard rule detail |
+| Continuous observed-time evaluation and issue lifecycle | Covered | hero, recovery, recurrence, OFF/missing/stale tests |
+| Portfolio and issue-investigation dashboard | Covered | frontend/API tests and captured screenshots |
+| AI interpretation, ontology validation, and preview | Covered | AI suite and successful real-provider evidence |
+| Human-only confirmation and exactly-once activation | Covered | guarded confirmation tests; no model activation tool |
+| Provider retry/failure handling and audit trace | Covered | deterministic tests plus real HTTP 429 evidence |
+| One-command demo, reset, verification, and tests | Covered | Make targets and clean-volume validation |
+| Historical backtest bonus | Covered | read-only backtest tests and rule-detail UI |
+| Optional MCP bonus | Covered | four read-only tools and MCP test suite |
+| AI-assistance disclosure and checkpoint | Covered | dedicated assessment documents |
+
+## Remaining non-blocking limitations
+
+- Compose uses single-node PostgreSQL/TimescaleDB and Redpanda; it is a local assessment topology, not HA.
+- The worker polls database-backed state and dashboard projections are synchronous; production scale would add
+  partitioned/checkpointed processing, batching/materialization, and observability.
+- Authentication, RBAC, multi-user approvals, work orders, and cloud deployment are intentionally out of scope.
+- AI authoring supports only the existing SAT absolute-deviation DSL.

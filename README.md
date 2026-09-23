@@ -49,8 +49,8 @@ case `ahu-b-f01-west`).
 
 Use the 5–10 minute [demonstration guide](docs/demonstration-guide.md). It covers system health, the hero
 issue and evidence timeline, installation versus affected spaces, rule preview/exclusions, the Building B
-override, non-trigger cases, ingestion exceptions, and the AI trust boundary. A precise evidence-capture
-sequence is in [the screenshot walkthrough](docs/screenshot-walkthrough.md).
+override, non-trigger cases, historical backtesting, ingestion exceptions, and the AI trust boundary. Captured
+review evidence is indexed in [the screenshot gallery](docs/screenshots/README.md).
 Exact commands and observed results are recorded in the [final validation report](docs/validation-report.md).
 
 ## Architecture and stack
@@ -70,7 +70,7 @@ Neo4j/RDF infrastructure is intentionally absent.
 
 Key paths are `apps/` (service entry points/web), `src/afdd/` (domain logic), `db/migrations/`, `tests/`,
 `docs/`, and the immutable `data/candidate-starter-pack/` input. See [architecture](docs/architecture.md),
-[technical decisions](docs/technical-decisions.md), and the [requirement matrix](docs/requirements-checklist.md).
+the [documentation guide](docs/README.md), and the [validation/requirement report](docs/validation-report.md).
 
 ## Commands
 
@@ -166,14 +166,20 @@ A successful OpenAI `gpt-5.6-terra` run reached `READY_FOR_REVIEW`: validation p
 preview matched 8 targets and excluded 16, and no human confirmation or activation occurred. The earlier HTTP
 429 result (two calls/one bounded retry; 5,408 ms) remains additional failure-path evidence only.
 
-See [real-model evaluation](docs/real-model-evaluation.md) and the preserved [raw real-model demo output](docs/real-model-demo.txt).
+See [AI authoring](docs/ai-authoring.md) and the preserved [raw evidence](docs/evidence/).
 
-See [AI authoring](docs/ai-authoring.md) and [AI-assistance disclosure](docs/ai-assistance.md).
+The required AI-use disclosure is in [AI assistance](docs/ai-assistance.md).
+
+## Documentation
+
+The short [documentation guide](docs/README.md) gives the recommended review order. Detailed material is split
+by concern: [architecture](docs/architecture.md), [AFDD semantics](docs/afdd.md), [AI safety](docs/ai-authoring.md),
+[demo steps](docs/demonstration-guide.md), and [validation evidence](docs/validation-report.md).
 
 ## Known limitations
 
 - The demo uses one broker node and synchronous database-backed evaluation; production would add HA,
   observability, secret management, retention policies, and horizontally partitioned workers.
-- Screenshots are supplied as an exact capture checklist because browser capture was unavailable in this
-  environment; no images are fabricated.
-- Acknowledgement/work-order workflows and bonus requirements other than historical backtesting are out of scope.
+- Local browser screenshots are evidence of the captured run; generated IDs and browser-local timestamp
+  rendering may differ on a fresh replay.
+- Acknowledgement/work-order workflows, additional rule types, and production cloud infrastructure are out of scope.

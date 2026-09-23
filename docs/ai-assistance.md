@@ -18,12 +18,12 @@ Concrete corrections from review:
 - Reset initially risked leaving ingestion audit rows because they are not ontology-FK dependent. The final
   reset explicitly truncates `ingestion_events CASCADE`, making clean replay counts reproducible.
 - An unsafe design possibility—putting model-proposed asset IDs directly into a rule draft—was rejected. The
-  implementation resolves every property/floor reference against the live server ontology before validation,
-  preview, and again at confirmation.
+  implementation resolves every property, floor, and served-usage reference against the live server ontology
+  before validation, preview, and again at confirmation.
 
 Real provider validation covered both outcomes with `openai/gpt-5.6-terra`. The failure path made two calls with
 one bounded retry and safely ended `FAILED` after HTTP 429 in about 5,408 ms; `human_confirmed_at` and
 `activation_result` remained null. A later successful run reached `READY_FOR_REVIEW` in one call: validation
 passed, the ontology-backed preview matched 8 targets and excluded 16, and no confirmation or activation occurred.
 The HTTP 429 is additional failure-path evidence, not a submission blocker. See
-[real-model evaluation](real-model-evaluation.md).
+[AI authoring](ai-authoring.md) and the sanitized [`evidence/`](evidence/) files.

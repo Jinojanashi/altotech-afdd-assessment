@@ -3,8 +3,8 @@
 ## Scope
 
 This repository replays the supplied telemetry, ingests it, evaluates the required AHU fault rule, and
-exposes results through an API, operations dashboard, and human-gated AI authoring workflow. Source CSVs
-remain immutable inputs; bonus features are outside scope.
+exposes results through an API, operations dashboard, and human-gated AI authoring workflow. Historical
+backtesting and a read-only MCP interface are optional, isolated additions. Source CSVs remain immutable.
 
 ## Components
 
@@ -13,6 +13,10 @@ candidate CSVs -> simulator -> telemetry.raw.v1 -> ingestion -> TimescaleDB
                                       Redpanda                         |
                                                                        v
 web -> FastAPI API ------------------------------------------> PostgreSQL <- AFDD worker
+              |                                                    ^
+              +-> AI authoring -> OpenAI (optional)                |
+              +-> historical backtest (read-only)                  |
+MCP client -> read-only MCP tools ---------------------------------+
 ```
 
 - **Simulator:** converts each source snapshot into a versioned device event. Playback uses source time,
@@ -25,6 +29,23 @@ web -> FastAPI API ------------------------------------------> PostgreSQL <- AFD
   React/TypeScript provides the focused reviewer dashboard and human review/confirmation UI.
 - **Storage:** PostgreSQL stores application state and a relational Brick-aligned ontology. TimescaleDB
   hypertables store time-series readings. Neo4j is intentionally not used.
+- **AI authoring:** the provider proposes a constrained interpretation; server orchestration performs ontology
+  resolution, validation, preview, and the explicit confirmation boundary.
+- **Historical backtest:** reuses target resolution and the evaluator's pure transition function in memory;
+  it cannot write issue, rule, evaluator, or telemetry state.
+- **MCP:** an optional stdio process exposes four read-only tools over existing query/preview functions. It is
+  not part of the normal Compose runtime and has no mutation, SQL, shell, or activation tool.
+
+## Code boundaries
+
+`apps/` contains transport-specific entrypoints: FastAPI routes, Kafka producer/consumer wiring, worker CLI,
+MCP stdio, and the web client. `src/afdd/` owns application/domain behavior and database queries. Migrations
+own schema evolution, while scripts and the Makefile orchestrate reviewer workflows. Dependencies point from
+entrypoints into `afdd`; domain modules do not import FastAPI, MCP, React, or Docker behavior.
+
+The code intentionally keeps SQL next to the small domain services that own each use case. Splitting every
+query into repository interfaces would add indirection without improving this assessment. At production scale,
+`rules`, `evaluator`, and `ai_authoring` are the clearest candidates for separate persistence adapters.
 
 ## Event and delivery decisions
 
@@ -72,10 +93,31 @@ Full rule targeting, timing boundaries, late-event behavior, lifecycle, and evid
 
 ## AI trust boundary
 
-The provider returns only a schema-constrained interpretation. Server-owned bounded tools resolve all
-property/floor references against the current ontology, build the existing rule DSL, validate and preview it,
+The provider returns only a schema-constrained interpretation. Server-owned bounded tools resolve all scope
+references against the current ontology, build the existing rule DSL, validate and preview it,
 and persist a state/tool trace. Only the human confirmation endpoint can create and activate a rule. Provider
 errors, malformed output, unknown assets, unsupported logic, and ontology drift stop safely.
+
+Free-text scope dimensions are explicit (`property`, `floor`, and served-space usage). The server exact-matches
+them against the current typed ontology. A uniquely misclassified reference is normalized with an audit event;
+cross-dimension ambiguity asks for clarification, and an unknown reference is rejected.
+
+## Technical decisions and tradeoffs
+
+| Choice | Why here | Larger-scale direction |
+|---|---|---|
+| PostgreSQL relational ontology | Required traversals fit explicit typed edges and stay transactional with application data. | Add closure/materialized projections, or a governed graph service only when query evidence warrants it. |
+| TimescaleDB history | Keeps observed-time data beside relational joins and transactions. | Add retention/compression policies, sizing, and HA. |
+| Redpanda | Provides the required Kafka-compatible, keyed replay boundary with a small local footprint. | Use replication, schema governance, ACLs, lag alerts, and retention planning. |
+| Separate simulator and ingestion | Proves the event boundary and prevents source readers bypassing validation. | Deploy and scale consumers independently. |
+| Database idempotency | Stable UUIDv5 plus unique source identity protects business effects during retry/replay. | Add batching/partitioning and consider broker transactions at higher scale. |
+| Device `observed_at` | Device time drives history and AFDD; receipt time remains delivery audit context. | Add source clock-quality and future-skew quarantine policies. |
+| Latest-state non-regression | Conditional upsert prevents late observations replacing newer state. | Prefer an upstream sequence for semantic equal-time ordering. |
+| 120-second freshness | Twice the supplied 60-second cadence tolerates one delayed interval while failing safe. | Configure by point/source SLA. |
+| Immutable rule versions and evidence | Preserves why an issue opened even after configuration changes. | Add governance, approval metadata, retention, and evidence schema versioning. |
+| Bounded AI tools and confirmation | The model cannot widen capabilities or activate a rule. | Add identity, RBAC, approval policy, and audit export. |
+| In-memory backtest isolation | Reuses deterministic semantics with no production-state mutation. | Add checkpointed windows only if broader historical analysis is required. |
+| Read-only MCP stdio | Reuses existing projections without adding a network service or mutation path. | Add authentication and governed deployment if exposed beyond local review. |
 
 ## Main risks
 
@@ -85,3 +127,5 @@ errors, malformed output, unknown assets, unsupported logic, and ontology drift 
    and expose unresolved entities.
 3. Missing or stale data could look like recovery or a fault; quality/disposition data must remain visible
    and evaluation must fail safe.
+4. Synchronous SQL projections and a polling worker are intentionally simple; production scale would require
+   batching/materialization, checkpointed partitions, metrics/tracing, and high-availability infrastructure.
