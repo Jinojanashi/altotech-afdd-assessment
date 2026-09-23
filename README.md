@@ -127,6 +127,23 @@ read-only: it does not activate a rule, create issues, update evaluator state, o
 implementation is intentionally limited to the existing SAT absolute-deviation DSL and evaluates only
 observations inside the requested window; it does not carry qualification state in from before the window.
 
+## MCP Interface (Optional Bonus)
+
+The optional MCP service provides a narrow interoperability interface for an MCP-compatible local client; it
+is not needed by `make demo`, the API, the dashboard, or AFDD evaluation. Start its standard stdio transport
+only when needed:
+
+```bash
+docker compose --profile mcp run --rm -i mcp
+```
+
+It exposes only `get_portfolio_summary`, `get_equipment_context`, `get_issue_detail`, and
+`preview_rule_targets`. These tools call existing read/query and rule-preview functions, returning
+canonical IDs and explicit topology rather than guessing from names. There are deliberately no MCP tools for
+activation, confirmation, creation, telemetry writes, ontology changes, raw SQL, shell/filesystem access, or
+secrets. The interface has no authentication and is intended only for local assessment review; it uses stdio
+and has no network listener.
+
 ## AI-assisted authoring
 
 The model can only return a constrained interpretation. Server code resolves current ontology IDs, validates

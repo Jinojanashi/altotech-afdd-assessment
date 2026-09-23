@@ -23,6 +23,9 @@ dev = [
   "pytest>=8.3,<9",
   "ruff>=0.6,<1",
 ]
+mcp = [
+  "mcp==1.30.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/afdd"]
@@ -34,4 +37,3 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-

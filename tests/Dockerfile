@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app:/app/src
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-cache-dir '.[dev]'
+RUN pip install --no-cache-dir '.[dev,mcp]'
 COPY apps ./apps
 COPY db/migrations ./db/migrations
 COPY tests ./tests

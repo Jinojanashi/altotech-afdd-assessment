@@ -147,6 +147,23 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  mcp:
+    build:
+      context: .
+      dockerfile: apps/mcp/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://afdd:afdd-local-only@db:5432/afdd}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["mcp"]
+    stdin_open: true
+    tty: true
+    restart: "no"
+
   test:
     build:
       context: .
