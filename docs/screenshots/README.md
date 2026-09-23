@@ -5,11 +5,10 @@ datetime controls may render the same instants in the local timezone.
 
 1. [Portfolio health](01-portfolio-health.png) — service status, inventory, and ingestion counts.
 2. [Hero issue timeline](02-hero-issue-timeline.png) — qualification, opening, and recovery.
-3. [Hero issue evidence](03-hero-issue-evidence.png) — RUN/SAT/SAT_SP and threshold evidence.
-4. [Hero affected spaces](04-hero-affected-spaces.png) — installation room, served zone, and occupied rooms.
-5. [Rule preview and backtest](05-rule-preview-backtest.png) — target scope, override, and read-only simulation.
-6. [AI ready for review](06-ai-ready-for-review.png) — real model result before confirmation or activation.
-7. [AI-confirmed rule](07-ai-confirmed-rule.png) — rule detail after a separate explicit human confirmation.
+3. [Hero issue evidence and hero affected spaces](03-hero-issue-evidence-and-hero-affected-spaces.png) — RUN/SAT/SAT_SP, threshold evidence, installation room, served zone, and occupied rooms.
+4. [Rule preview and backtest](04-rule-preview-backtest.png) — target scope, override, and read-only simulation.
+5. [AI ready for review](05-ai-ready-for-review.png) — real model result before confirmation or activation.
+6. [AI-confirmed rule](06-ai-confirmed-rule.png) — rule detail after a separate explicit human confirmation.
 
-The sixth image demonstrates the required AI safety boundary. The seventh demonstrates the guarded human path;
+The fifth image demonstrates the required AI safety boundary. The sixth demonstrates the guarded human path;
 it is not evidence of automatic model activation.
